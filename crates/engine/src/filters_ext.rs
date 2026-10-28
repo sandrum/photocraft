@@ -586,6 +586,54 @@ pub(crate) fn resolve_in_layer(fp: &mut FilterParams, layer: &Layer, bounds: Rec
     }
 }
 
+/// Lens Blur's Set Focal Point: `focalPoint` `[x, y]` (document pixels) sets the focal distance
+/// to the depth there, averaged over 3×3 pixels, as clicking the preview does in Photoshop.
+/// Runs after the depth map is resolved; `layer` supplies the alpha for the Transparency source.
+/// Without a depth source, or with a point off the map, the focal distance stays as given.
+pub(crate) fn resolve_focal_point(fp: &mut FilterParams, layer: Option<&Layer>, p: &Value) -> Result<()> {
+    let FilterParams::LensBlur { depth, depth_map, focal_distance, invert_depth, .. } = fp else { return Ok(()) };
+    let Some(point) = p.get("focalPoint").filter(|v| !v.is_null()) else { return Ok(()) };
+    let bad = |msg: &str| EngineError::BadParams { cmd: "filter.blur.lensBlur".into(), msg: msg.into() };
+    let coords: Vec<f64> = point.as_array().map(|a| a.iter().filter_map(Value::as_f64).collect()).unwrap_or_default();
+    let [x, y] = coords[..] else { return Err(bad("`focalPoint` must be [x, y] in document pixels")) };
+    if !x.is_finite() || !y.is_finite() {
+        return Err(bad("`focalPoint` must be finite"));
+    }
+    let (x, y) = (x.floor().clamp(-1e9, 1e9) as i64, y.floor().clamp(-1e9, 1e9) as i64);
+    let sample: Box<dyn Fn(i32, i32) -> Option<f32>> = match depth {
+        DepthSource::None => return Ok(()),
+        DepthSource::LayerMask | DepthSource::Channel => {
+            let Some(map) = depth_map.clone() else { return Ok(()) };
+            Box::new(move |x, y| map.rect.contains(x, y).then(|| map.get(x, y, 0)))
+        }
+        DepthSource::Transparency => {
+            let Some(surf) = layer.and_then(|l| l.surface()).filter(|s| s.format().alpha) else { return Ok(()) };
+            let n = surf.channels();
+            Box::new(move |x, y| {
+                let mut px = [0.0f32; 8];
+                surf.read_pixel(x, y, &mut px);
+                px.get(n.saturating_sub(1)).copied()
+            })
+        }
+    };
+    let mut sum = 0.0f32;
+    let mut count = 0u32;
+    for dy in -1..=1 {
+        for dx in -1..=1 {
+            let (Ok(sx), Ok(sy)) = (i32::try_from(x + dx), i32::try_from(y + dy)) else { continue };
+            if let Some(v) = sample(sx, sy) {
+                sum += v;
+                count += 1;
+            }
+        }
+    }
+    if count > 0 {
+        let d = sum / count as f32;
+        *focal_distance = (if *invert_depth { 1.0 - d } else { d }).clamp(0.0, 1.0) * 255.0;
+    }
+    Ok(())
+}
+
 fn relight_bad(msg: &str) -> EngineError {
     EngineError::BadParams { cmd: "filter.render.relight".into(), msg: msg.into() }
 }
@@ -761,7 +809,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "filter.blur.lensBlur",
             "Lens Blur…",
             ["Filter", "Blur"],
-            r##"{"radius":0..100=15,"shape":"hexagon|triangle|square|pentagon|heptagon|octagon","bladeCurvature":0..100=0,"rotation":0..360=0,"depthMap":"none|transparency|layerMask|channel","depthChannel":index|name?,"focalDistance":0..255=0,"invert":bool,"brightness":0..100=0,"threshold":0..255=255,"noise":0..100=0,"distribution":"uniform|gaussian","monochromatic":bool,"seed":u32=0}"##
+            r##"{"radius":0..100=15,"shape":"hexagon|triangle|square|pentagon|heptagon|octagon","bladeCurvature":0..100=0,"rotation":0..360=0,"depthMap":"none|transparency|layerMask|channel","depthChannel":index|name?,"focalDistance":0..255=0,"focalPoint":[x,y]? (Set Focal Point: the focal distance becomes the depth there),"invert":bool,"brightness":0..100=0,"threshold":0..255=255,"noise":0..100=0,"distribution":"uniform|gaussian","monochromatic":bool,"seed":u32=0}"##
         ),
         cmd!(
             "filter.blur.shapeBlur",

@@ -722,6 +722,8 @@ fn halo_ext(p: &FilterParams) -> Halo {
         FilterParams::ReduceNoise { .. } => r(denoise::reach()),
         // The kernels clamp the radius to 100 px: size the source window by what they use.
         FilterParams::SmartBlur { radius, .. } => r(radius.min(100.0)),
+        // With a depth map, big blurs run on a grid of up to MAX_GRID-pixel cells: one more cell of reach.
+        FilterParams::LensBlur { radius, depth, .. } if *depth != DepthSource::None => r(radius.min(100.0) + blur2::LENS_MAX_GRID as f32),
         FilterParams::LensBlur { radius, .. } => r(radius.min(100.0)),
         FilterParams::ShapeBlur { radius, .. } => r(shape_blur::radius(*radius)),
         FilterParams::TiltShift { blur, .. } => r(gallery::reach(*blur)),
@@ -949,6 +951,8 @@ fn min_max_ink(src: &Image, out: Rect, ctx: &Ctx, radius: f32, max: bool, preser
 
 /// Output tile size used by [`apply`].
 pub const TILE: i32 = 256;
+/// Tile side for Lens Blur with a depth map (see [`auto_tile`]).
+const LENS_DEPTH_TILE: i32 = 512;
 
 /// The area a filter writes for a layer whose pixels cover `content`:
 /// global filters and renders that ignore the layer's pixels (Fibers) write the reference
@@ -1005,6 +1009,14 @@ pub fn apply_in_with(
 /// halo arithmetic is done in `i64` and the result capped: an `i32::MAX` radius must not
 /// overflow in debug builds, and must not produce a tile bigger than the hard cap.
 fn auto_tile(params: &FilterParams, bounds: Rect) -> i32 {
+    // Depth Lens Blur transforms each tile's window with FFTs: a bigger tile keeps the halo
+    // (re-read and re-transformed for every depth layer) a smaller share of the work.
+    if let FilterParams::LensBlur { depth, radius, .. } = params
+        && *depth != DepthSource::None
+        && *radius >= 8.0
+    {
+        return LENS_DEPTH_TILE;
+    }
     match params.halo_for(bounds) {
         // The radius is input-derived: widen to i64 before the arithmetic and cap the
         // conversion, so an i32::MAX radius cannot overflow (debug panic) and cannot make a

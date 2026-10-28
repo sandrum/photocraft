@@ -365,6 +365,9 @@ mod smart_tests;
 
 // ---------- lens blur ----------
 
+mod lens_layers;
+pub(crate) use lens_layers::MAX_GRID as LENS_MAX_GRID;
+
 pub(crate) struct LensSpec<'a> {
     pub radius: f32,
     pub blades: u32,
@@ -382,13 +385,12 @@ pub(crate) struct LensSpec<'a> {
     pub depth_map: Option<&'a Image>,
 }
 
-/// Depth levels the per-pixel iris radius is interpolated between.
-const LENS_LEVELS: usize = 8;
-
 /// Lens Blur: an iris-shaped (polygon → circle by curvature) bokeh kernel,
 /// with highlights above the threshold brightened first so they bloom into
-/// iris shapes. With a depth map the iris radius grows with distance from
-/// the focal plane. Finally optional noise restores grain.
+/// iris shapes. Without depth the whole image gets the full iris; with a depth
+/// map the image is blurred as depth layers composited far to near (see
+/// [`lens_layers`]), the iris growing with distance from the focal plane.
+/// Finally optional noise restores grain.
 pub(crate) fn lens_blur(src: &Image, out: Rect, ctx: &Ctx, spec: &LensSpec) -> Vec<f32> {
     let n = src.ch;
     let cc = ncol(ctx, n);
@@ -403,16 +405,46 @@ pub(crate) fn lens_blur(src: &Image, out: Rect, ctx: &Ctx, spec: &LensSpec) -> V
         let pr = polygon_radius(v.atan2(u), blades, rot - PI / 2.0);
         rho <= pr + (1.0 - pr) * curv
     };
-    let levels: Vec<Spans> = (0..=LENS_LEVELS).map(|k| Spans::new(rmax * k as f32 / LENS_LEVELS as f32, iris)).collect();
-    // Specular highlight boost before blurring.
+    let focal = spec.focal.clamp(0.0, 255.0) / 255.0;
+    // Depth per window pixel (0 near … 1 far), or None for an even blur.
+    let depth: Option<Vec<f32>> = match spec.depth {
+        DepthSource::None => None,
+        DepthSource::Transparency if !ctx.alpha => None,
+        DepthSource::Transparency | DepthSource::LayerMask | DepthSource::Channel => {
+            // Where the map has no pixels, blur fully (the depth farthest from the focal plane).
+            let missing = if focal <= 0.5 { 1.0 } else { 0.0 };
+            let mut d = Vec::with_capacity(ww * wh);
+            for y in win.y0..win.y1 {
+                for x in win.x0..win.x1 {
+                    let v = match spec.depth {
+                        DepthSource::Transparency => Some(src.get(x, y, n - 1)),
+                        _ => spec.depth_map.and_then(|m| m.rect.contains(x, y).then(|| m.get(x, y, 0))),
+                    };
+                    d.push(match v {
+                        Some(v) if spec.invert => 1.0 - v,
+                        Some(v) => v,
+                        None => missing,
+                    });
+                }
+            }
+            Some(d)
+        }
+    };
+    // Specular highlight boost before blurring. Pixels that stay in focus are left alone, so
+    // sharp highlights don't blow out.
     let mut p = premul_window(src, win, ctx.alpha);
     let boost = spec.brightness.clamp(0.0, 100.0) / 100.0 * 4.0;
     if boost > 0.0 {
         let th = spec.threshold.clamp(0.0, 255.0) / 255.0;
         let sub = crate::fxutil::subtractive(ctx);
-        for px in p.chunks_exact_mut(n) {
+        for (i, px) in p.chunks_exact_mut(n).enumerate() {
             let a = if ctx.alpha { px[n - 1] } else { 1.0 };
             if a <= 0.0 {
+                continue;
+            }
+            let coc = depth.as_ref().map_or(rmax, |d| rmax * (d[i] - focal).abs());
+            let blurred = ((coc - 0.5) / 2.0).clamp(0.0, 1.0);
+            if blurred <= 0.0 {
                 continue;
             }
             let mut st = [0.0f32; MAXC];
@@ -420,66 +452,48 @@ pub(crate) fn lens_blur(src: &Image, out: Rect, ctx: &Ctx, spec: &LensSpec) -> V
                 st[c] = if ctx.alpha && c < n - 1 { px[c] / a } else { px[c] };
             }
             let l = luma(ctx, &st[..n]);
-            let k = 1.0 + boost * smoothstep(th, th + 0.02, l);
+            let k = 1.0 + boost * blurred * smoothstep(th, th + 0.02, l);
             for v in px.iter_mut().take(cc) {
                 *v = if sub { a - (a - *v) / k } else { *v * k };
             }
         }
     }
-    let pre = Prefix::new(&p, ww, wh, n);
-    let depth_at = |x: i32, y: i32| -> Option<f32> {
-        let d = match spec.depth {
-            DepthSource::None => return None,
-            DepthSource::Transparency => {
-                if !ctx.alpha {
-                    return None;
+    let blurred = match &depth {
+        Some(d) => lens_layers::layered(&p, d, win, out, n, focal, rmax, &iris),
+        None => {
+            // Even blur: the iris spans over prefix sums, O(radius) per pixel. Gathering with
+            // the kernel mirrored is the same as every pixel scattering the iris itself.
+            let spans = Spans::new(rmax, |u, v| iris(-u, -v));
+            let pre = Prefix::new(&p, ww, wh, n);
+            let mut acc = [0.0f64; MAXC];
+            let mut v = Vec::with_capacity(out.width() as usize * out.height() as usize * n);
+            for y in out.y0..out.y1 {
+                for x in out.x0..out.x1 {
+                    pre.mean(&spans, x - win.x0, y - win.y0, &mut acc);
+                    v.extend(acc[..n].iter().map(|&a| a as f32));
                 }
-                src.get(x, y, n - 1)
             }
-            DepthSource::LayerMask | DepthSource::Channel => spec.depth_map?.get(x, y, 0),
-        };
-        Some(if spec.invert { 1.0 - d } else { d })
+            v
+        }
     };
-    let focal = spec.focal.clamp(0.0, 255.0) / 255.0;
     let amount = spec.noise.clamp(0.0, 100.0) / 100.0 * 0.25;
-    let mut acc = [0.0f64; MAXC];
-    let mut acc2 = [0.0f64; MAXC];
-    let mut px = [0.0f32; MAXC];
-    let mut res = Vec::with_capacity(out.width() as usize * out.height() as usize * n);
-    for y in out.y0..out.y1 {
-        for x in out.x0..out.x1 {
-            let (wx, wy) = (x - win.x0, y - win.y0);
-            let level = match depth_at(x, y) {
-                None => LENS_LEVELS as f32,
-                Some(d) => ((d - focal).abs() * LENS_LEVELS as f32).min(LENS_LEVELS as f32),
-            };
-            let lo = level.floor() as usize;
-            let f = level - lo as f32;
-            pre.mean(&levels[lo], wx, wy, &mut acc);
-            if f > 1e-4 && lo < LENS_LEVELS {
-                pre.mean(&levels[lo + 1], wx, wy, &mut acc2);
-                for c in 0..n {
-                    acc[c] += (acc2[c] - acc[c]) * f as f64;
-                }
+    let mut res = blurred;
+    for (i, px) in res.chunks_exact_mut(n).enumerate() {
+        unpremul_px(px, ctx.alpha);
+        let x = out.x0 + (i % out.width() as usize) as i32;
+        let y = out.y0 + (i / out.width() as usize) as i32;
+        if amount > 0.0 && (!ctx.alpha || px[n - 1] > 0.0) {
+            for (c, v) in px.iter_mut().enumerate().take(cc) {
+                let ch = if spec.mono { 0 } else { c as u32 };
+                *v += match spec.distribution {
+                    Distribution::Uniform => (hash01(x, y, ch + 200, spec.seed) - 0.5) * 2.0 * amount,
+                    Distribution::Gaussian => {
+                        let u1 = hash01(x, y, ch * 2 + 301, spec.seed).max(1e-7);
+                        let u2 = hash01(x, y, ch * 2 + 302, spec.seed);
+                        (-2.0 * u1.ln()).sqrt() * (TAU * u2).cos() * amount * 0.5
+                    }
+                };
             }
-            for c in 0..n {
-                px[c] = acc[c] as f32;
-            }
-            unpremul_px(&mut px[..n], ctx.alpha);
-            if amount > 0.0 && (!ctx.alpha || px[n - 1] > 0.0) {
-                for (c, v) in px.iter_mut().enumerate().take(cc) {
-                    let ch = if spec.mono { 0 } else { c as u32 };
-                    *v += match spec.distribution {
-                        Distribution::Uniform => (hash01(x, y, ch + 200, spec.seed) - 0.5) * 2.0 * amount,
-                        Distribution::Gaussian => {
-                            let u1 = hash01(x, y, ch * 2 + 301, spec.seed).max(1e-7);
-                            let u2 = hash01(x, y, ch * 2 + 302, spec.seed);
-                            (-2.0 * u1.ln()).sqrt() * (TAU * u2).cos() * amount * 0.5
-                        }
-                    };
-                }
-            }
-            res.extend_from_slice(&px[..n]);
         }
     }
     res
