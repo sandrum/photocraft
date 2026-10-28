@@ -74,7 +74,7 @@ fn smooth_len(n: usize) -> usize {
     loop {
         let mut r = m;
         for p in [2, 3, 5] {
-            while r % p == 0 {
+            while r.is_multiple_of(p) {
                 r /= p;
             }
         }

@@ -818,6 +818,37 @@ fn uses_logarithmic_slider(min: f32, max: f32) -> bool {
 }
 
 const LENS_BLUR: &str = "filter.blur.lensBlur";
+/// Lens Blur's focal point (`[x, y]` in document pixels), set by clicking the preview.
+pub(crate) const FOCAL_POINT: &str = "focalPoint";
+/// While true, a click on the filter preview sets [`FOCAL_POINT`] instead of centring the view.
+pub(crate) const SETTING_FOCAL_POINT: &str = "__settingFocalPoint";
+
+/// Lens Blur's Set Focal Point, above Blur Focal Distance as in Photoshop: press it, then click
+/// the preview, and the depth under that point comes into focus. The point stays until the
+/// focal distance slider is moved.
+fn focal_point_row(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
+    let t = Tokens::get(ui.ctx());
+    let mut armed = f.get(SETTING_FOCAL_POINT).and_then(Value::as_bool) == Some(true);
+    let point = f.get(FOCAL_POINT).and_then(Value::as_array).and_then(|a| Some((a.first()?.as_f64()?, a.get(1)?.as_f64()?)));
+    // Without a depth map every pixel blurs alike: there is no depth to pick.
+    let has_depth = f.get("depthMap").and_then(Value::as_str).is_some_and(|d| d != "none");
+    armed &= has_depth;
+    ui.horizontal(|ui| {
+        if !has_depth {
+            ui.disable();
+        }
+        if ui.selectable_label(armed, tl!("Set Focal Point")).on_hover_text(tl!("Click the preview to focus on the depth there")).clicked() {
+            armed = !armed;
+        }
+        if let Some((x, y)) = point {
+            ui.label(egui::RichText::new(format!("{x:.0}, {y:.0}")).color(t.text_dim));
+            if ui.small_button("×").on_hover_text(tl!("Clear the focal point")).clicked() {
+                f.remove(FOCAL_POINT);
+            }
+        }
+    });
+    f.insert(SETTING_FOCAL_POINT.into(), json!(armed));
+}
 
 /// Lens Blur's Depth Map Source lists the document's alpha channels after None, Transparency
 /// and Layer Mask, as in Photoshop (#7400): their names go to `__channels`. A `channel` source
@@ -1168,6 +1199,9 @@ pub fn body(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
         }
         match p.kind {
             Kind::Range { min, max, default } => {
+                if cmd == LENS_BLUR && p.key == "focalDistance" {
+                    focal_point_row(ui, f);
+                }
                 // The field's shown precision: small ranges keep their two decimals, and so
                 // does the Arbitrary angle; the other wide fields round to one (#12035).
                 let scale = field_scale(&cmd, &p.key, min, max);
@@ -1179,6 +1213,7 @@ pub fn body(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
                 // frame after opening or Alt+Reset, over the 32.12 it stored (#13067).
                 let src = f.get(&p.key).and_then(Value::as_f64).map(|x| if wide_decimals { round64(x) } else { x });
                 let mut v = src.unwrap_or(default as f64) as f32;
+                let before = v;
                 // A widget edit this frame makes the field's f32 value authoritative (#12035).
                 let mut edited = false;
                 if cmd == "image.mode.indexedColor" && p.key == "colors" {
@@ -1228,6 +1263,10 @@ pub fn body(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
                                 .changed();
                     }
                 });
+                // Dragging Blur Focal Distance takes over from a focal point set on the preview.
+                if cmd == LENS_BLUR && p.key == "focalDistance" && v != before {
+                    f.remove(FOCAL_POINT);
+                }
                 // Such a field also keeps its rounded value as f64: stored as f32, 32.12 widens to
                 // 32.1199989 and OK sends that to the command (#13067). A value the user typed or
                 // dragged this frame is the widget's f32, so it rounds from that.
@@ -1648,6 +1687,17 @@ fn scale_preview_params(command: &str, params: &mut Value, k: u32) {
                 // sign: the floor that keeps a radius positive turned them into +0.1 (#2063).
                 let x = x / k as f64;
                 *v = json!(if x > 0.0 { x.max(floor) } else { minimum.map_or(x, |m| x.max(m)) });
+            }
+        }
+    }
+    // Lens Blur's focal point is a document position: the proxy is k times smaller.
+    if command == LENS_BLUR
+        && k > 1
+        && let Some(point) = params.get_mut(FOCAL_POINT).and_then(Value::as_array_mut)
+    {
+        for c in point.iter_mut() {
+            if let Some(x) = c.as_f64() {
+                *c = json!((x / k as f64).floor());
             }
         }
     }

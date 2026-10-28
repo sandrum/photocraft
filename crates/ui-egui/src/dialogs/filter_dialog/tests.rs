@@ -2445,3 +2445,16 @@ fn indexed_matte_cancel_keeps_the_previous_choice() {
     assert_eq!(parent.fields.get("matte").and_then(Value::as_str), None, "cancel restores the previous None choice");
     assert!(!parent.fields.contains_key("__pickColorDefault"));
 }
+
+/// Lens Blur's focal point is a document position: the preview's proxy is k times smaller, so
+/// the point the user clicked must land on the same content there.
+#[test]
+fn lens_blur_focal_point_scales_to_the_preview_proxy() {
+    let mut p = json!({"radius": 20, "focalPoint": [401, 99]});
+    scale_preview_params(LENS_BLUR, &mut p, 4);
+    assert_eq!(p["focalPoint"], json!([100.0, 24.0]));
+    assert_eq!(p["radius"], json!(5.0));
+    let mut p = json!({"focalPoint": [401, 99]});
+    scale_preview_params(LENS_BLUR, &mut p, 1);
+    assert_eq!(p["focalPoint"], json!([401, 99]), "full-size previews keep the point");
+}
