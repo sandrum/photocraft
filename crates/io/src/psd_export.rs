@@ -424,6 +424,11 @@ impl Ex {
             }
         };
         let fill_rule = |raw: &mut Vec<([u8; 4], Vec<u8>)>, regenerated: &mut Vec<([u8; 4], Vec<u8>)>, f: &photocraft_doc::Fill| {
+            // PSD has no lens flare fill: the layer is written as its rendered pixels.
+            if matches!(f, photocraft_doc::Fill::LensFlare(_)) {
+                raw.retain(|(k, _)| !matches!(k, b"SoCo" | b"GdFl" | b"PtFl"));
+                return;
+            }
             let keep = raw.iter().any(|(k, d)| matches!(k, b"SoCo" | b"GdFl" | b"PtFl") && blocks::parse_fill(k, d).as_ref() == Some(f));
             if !keep {
                 raw.retain(|(k, _)| !matches!(k, b"SoCo" | b"GdFl" | b"PtFl"));
@@ -488,7 +493,12 @@ impl Ex {
                     regenerated.extend(w);
                 }
             }
-            LayerContent::Fill(f) => fill_rule(&mut raw, &mut regenerated, f),
+            LayerContent::Fill(f) => {
+                if matches!(f, photocraft_doc::Fill::LensFlare(_)) {
+                    self.warnings.push(format!("layer \"{}\": lens flare saved as pixels (save as .pcraft to keep it editable)", l.name));
+                }
+                fill_rule(&mut raw, &mut regenerated, f)
+            }
             LayerContent::Shape(sh) => {
                 if let Some(f) = &sh.fill {
                     fill_rule(&mut raw, &mut regenerated, f);

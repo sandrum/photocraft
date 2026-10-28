@@ -116,6 +116,7 @@ pub mod paint_cmds;
 mod params;
 pub(super) mod path_edit_cmds;
 pub mod pattern_cmds;
+pub mod lens_flare_cmds;
 pub mod pattern_fill_cmds;
 pub mod perspective_crop_cmds;
 pub mod photo_cmds;
@@ -1233,6 +1234,7 @@ fn build() -> Vec<CommandSpec> {
     v.extend(crate::gradient_fill_cmds::specs());
     v.extend(crate::solid_fill_cmds::specs());
     v.extend(crate::pattern_fill_cmds::specs());
+    v.extend(crate::lens_flare_cmds::specs());
     v.extend(crate::type_cmds::specs());
     v.extend(crate::type_mask_cmds::specs());
     v.extend(crate::transform_cmds::specs());

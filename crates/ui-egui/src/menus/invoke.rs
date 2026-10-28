@@ -360,6 +360,9 @@ pub(crate) fn invoke_unguarded(app: &mut PhotocraftApp, ctx: &egui::Context, id:
             if let Some(dialog) = crate::pattern_fill_ui::open(app) {
                 return Ok(json!({"dialog": dialog}));
             }
+            if let Some(dialog) = crate::lens_flare_ui::open(app) {
+                return Ok(json!({"dialog": dialog}));
+            }
             let r = app.run(id, params)?;
             app.ui.panels.properties = true;
             app.ui.dock_tabs.properties = 0;
@@ -409,6 +412,11 @@ pub(crate) fn invoke_unguarded(app: &mut PhotocraftApp, ctx: &egui::Context, id:
         // the engine directly).
         photocraft_engine::pattern_fill_cmds::CREATE if params.as_object().is_none_or(|o| o.is_empty()) => {
             Ok(json!({"dialog": crate::pattern_fill_ui::open_new(app)?}))
+        }
+        // Layer › New Fill Layer › Lens Flare… from the menu: the Lens Flare dialog (with params:
+        // the engine directly).
+        photocraft_engine::lens_flare_cmds::CREATE if params.as_object().is_none_or(|o| o.is_empty()) => {
+            Ok(json!({"dialog": crate::lens_flare_ui::open_new(app)?}))
         }
         // Edit › Fill… from the menu or its shortcuts: the Fill dialog (with params: the engine).
         crate::fill_ui::COMMAND if params.as_object().is_none_or(|o| o.is_empty()) => {

@@ -47,7 +47,7 @@ fn fill_colors(f: &Fill) -> Vec<photocraft_doc::Color> {
     match f {
         Fill::Solid(c) => vec![*c],
         Fill::Gradient { stops, .. } => stops.iter().map(|s| s.1).collect(),
-        Fill::Pattern { .. } => Vec::new(),
+        Fill::Pattern { .. } | Fill::LensFlare(_) => Vec::new(),
     }
 }
 

@@ -279,6 +279,7 @@ fn command_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, d: &Dialog, fields: 
         _ if crate::brush_preset_dialog::owns(fields) => outcome = crate::brush_preset_dialog::body(app, ui, fields, interactive),
         _ if crate::fill_ui::owns(fields) => crate::fill_ui::body(app, ui, fields),
         _ if crate::pattern_fill_ui::owns(fields) => crate::pattern_fill_ui::body(app, ui, fields),
+        _ if crate::lens_flare_ui::owns(fields) => crate::lens_flare_ui::body(app, ui, fields),
         _ if crate::stroke_ui::owns(fields) => crate::stroke_ui::body(ui, fields),
         _ if crate::new_group_ui::owns(fields) => crate::new_group_ui::body(ui, fields),
         _ if crate::snapshot_dialog::owns(fields) => crate::snapshot_dialog::body(ui, fields),
@@ -617,6 +618,9 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
             } else if let Some(w) = crate::file_ui::dialog_width(&d.fields) {
                 ui.set_min_width(w);
                 ui.set_max_width(w);
+            } else if crate::lens_flare_ui::owns(&d.fields) {
+                ui.set_min_width(crate::lens_flare_ui::WIDTH);
+                ui.set_max_width(crate::lens_flare_ui::WIDTH);
             }
             // Duplicate Layer… is a fixed small grid (labels + 260 pt fields ≈ 352 pt):
             // the generic 380 pt minimum left a dead strip on its right.
@@ -806,6 +810,7 @@ const ROUTES: &[fn(&Fields) -> bool] = &[
     crate::brush_preset_dialog::owns,
     crate::fill_ui::owns,
     crate::pattern_fill_ui::owns,
+    crate::lens_flare_ui::owns,
     crate::stroke_ui::owns,
     crate::channel_options_ui::owns,
     crate::channel_options_ui::owns_new_spot,
@@ -959,6 +964,7 @@ fn confirm_command(app: &mut PhotocraftApp, d: Dialog) -> Result<Value, String> 
         _ if crate::brush_preset_dialog::owns(&d.fields) => crate::brush_preset_dialog::confirm(app, &d.fields),
         _ if crate::fill_ui::owns(&d.fields) => crate::fill_ui::confirm(app, &d.fields),
         _ if crate::pattern_fill_ui::owns(&d.fields) => crate::pattern_fill_ui::confirm(app, &d.fields),
+        _ if crate::lens_flare_ui::owns(&d.fields) => crate::lens_flare_ui::confirm(app, &d.fields),
         _ if crate::stroke_ui::owns(&d.fields) => crate::stroke_ui::confirm(app, &d.fields),
         _ if crate::new_group_ui::owns(&d.fields) => crate::new_group_ui::confirm(app, &d.fields),
         _ if crate::snapshot_dialog::owns(&d.fields) => crate::snapshot_dialog::confirm(app, &d.fields),
@@ -1117,6 +1123,7 @@ pub mod new_guide_ui;
 pub mod new_layer_ui;
 pub mod open_prompt;
 pub mod palette;
+pub(crate) mod lens_flare_ui;
 pub(crate) mod pattern_fill_ui;
 pub mod rasterize_prompt;
 pub mod replace_prompt;

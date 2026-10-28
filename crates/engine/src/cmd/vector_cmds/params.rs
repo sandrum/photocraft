@@ -151,6 +151,7 @@ pub(super) fn fill_json(f: &Fill) -> Value {
             "angle": angle, "scale": scale * 100.0, "style": format!("{style:?}").to_ascii_lowercase(), "reverse": reverse,
             "opacityStops": opacity_stops, "midpoints": midpoints, "offset": [offset.0, offset.1], "dither": dither, "align": align } }),
         Fill::Pattern { name, scale, .. } => json!({ "pattern": name, "scale": scale * 100.0 }),
+        Fill::LensFlare(f) => json!({ "lensFlare": crate::lens_flare_cmds::params_of(f) }),
     }
 }
 

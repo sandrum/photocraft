@@ -109,7 +109,7 @@ pub fn occludes_below(layer: &Layer, mode: photocraft_color::ColorMode) -> bool 
         Fill::Gradient { stops, opacity_stops, .. } => {
             !stops.is_empty() && stops.iter().all(|(_, c)| c.alpha >= 1.0) && opacity_stops.iter().all(|(_, o)| *o >= 1.0)
         }
-        Fill::Pattern { .. } => false,
+        Fill::Pattern { .. } | Fill::LensFlare(_) => false,
     };
     // A cached render in use (a PSD's stored fill pixels) may not be opaque.
     let cached = layer.fill_cache.as_ref().is_some_and(|c| c.fill == *f);

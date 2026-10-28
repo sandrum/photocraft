@@ -14,6 +14,7 @@ pub mod analysis;
 pub mod blend_if;
 pub mod comps;
 pub mod effects;
+pub mod lens_flare;
 pub mod mode;
 pub mod pattern;
 pub mod slices;
@@ -369,6 +370,9 @@ pub enum Fill {
         #[serde(default)]
         phase: (f32, f32),
     },
+    /// An editable lens flare (Layer › New Fill Layer › Lens Flare…), rendered as light: its
+    /// alpha is the light's strength, so it is usually blended with Screen.
+    LensFlare(Box<lens_flare::LensFlare>),
 }
 
 impl Fill {
@@ -384,7 +388,7 @@ impl Fill {
         match &mut self {
             Fill::Solid(c) => *c = c.in_mode(mode),
             Fill::Gradient { stops, .. } => stops.iter_mut().for_each(|(_, c)| *c = c.in_mode(mode)),
-            Fill::Pattern { .. } => {}
+            Fill::Pattern { .. } | Fill::LensFlare(_) => {}
         }
         self
     }

@@ -116,6 +116,9 @@ pub(crate) fn display_doc(app: &mut PhotocraftApp, idx: usize) -> (std::sync::Ar
     if let Some(shown) = crate::pattern_fill_ui::display_doc(app, idx) {
         return shown;
     }
+    if let Some(shown) = crate::lens_flare_ui::display_doc(app, idx) {
+        return shown;
+    }
     if let Some(shown) = crate::shape_fill_ui::display_doc(app, idx) {
         return shown;
     }

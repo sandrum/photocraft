@@ -295,6 +295,7 @@ pub static CATALOG: &[(&[&str], &str, Option<&str>, &str)] = &[
     (&["Layer", "New Fill Layer"], "Solid Color…", None, "layer.newFillLayer.solidColor"),
     (&["Layer", "New Fill Layer"], "Gradient…", None, "layer.newFillLayer.gradient"),
     (&["Layer", "New Fill Layer"], "Pattern…", None, "layer.newFillLayer.pattern"),
+    (&["Layer", "New Fill Layer"], "Lens Flare…", None, "layer.newFillLayer.lensFlare"),
     (&["Layer", "New Adjustment Layer"], "Brightness/Contrast…", None, "layer.newAdjustmentLayer.brightnessContrast"),
     (&["Layer", "New Adjustment Layer"], "Levels…", None, "layer.newAdjustmentLayer.levels"),
     (&["Layer", "New Adjustment Layer"], "Curves…", None, "layer.newAdjustmentLayer.curves"),

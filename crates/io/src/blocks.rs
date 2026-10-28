@@ -545,6 +545,11 @@ pub fn fill_to_desc(f: &Fill) -> ([u8; 4], Descriptor) {
                 .with("Ptrn", Value::Descriptor(pattern_ref_desc(name, id)));
             (*b"PtFl", with_pattern_placement(d, *angle, *link, *phase))
         }
+        // No PSD equivalent: layers write a flare as pixels (psd_export), so this is only a
+        // well-formed stand-in (transparent black).
+        Fill::LensFlare(_) => {
+            (*b"SoCo", Descriptor::new("null").with("Clr ", Value::Descriptor(color_to_desc_with_pc_alpha(&photocraft_color::Color::rgba(0.0, 0.0, 0.0, 0.0)))))
+        }
     }
 }
 

@@ -153,6 +153,7 @@ pub use dialogs::new_guide_ui;
 pub use dialogs::new_layer_ui;
 pub use dialogs::open_prompt;
 pub use dialogs::palette;
+pub(crate) use dialogs::lens_flare_ui;
 pub(crate) use dialogs::pattern_fill_ui;
 pub use dialogs::rasterize_prompt;
 pub use dialogs::replace_prompt;
@@ -545,6 +546,8 @@ pub struct PhotocraftApp {
     pub(crate) solid_fill_preview: Option<solid_fill_ui::Preview>,
     /// Live Pattern Fill dialog preview (pattern_fill_ui).
     pub(crate) pattern_fill_preview: Option<pattern_fill_ui::Preview>,
+    /// Live Lens Flare dialog preview (lens_flare_ui).
+    pub(crate) lens_flare_preview: Option<lens_flare_ui::Preview>,
     /// Shape fill Color Picker preview (shape_fill_ui).
     pub(crate) shape_fill_preview: Option<shape_fill_ui::Preview>,
     /// Liquify dialog, Puppet Warp and Perspective Warp sessions (distort_ui).

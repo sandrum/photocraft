@@ -701,7 +701,7 @@ fn convert_fill(f: &mut Fill, cc: &mut dyn FnMut(&mut Color)) {
     match f {
         Fill::Solid(c) => cc(c),
         Fill::Gradient { stops, .. } => stops.iter_mut().for_each(|s| cc(&mut s.1)),
-        Fill::Pattern { .. } => {}
+        Fill::Pattern { .. } | Fill::LensFlare(_) => {}
     }
 }
 

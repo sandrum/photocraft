@@ -142,7 +142,8 @@ fn surface_to_scratch(s: &Surface, rect: Rect) -> Buffer {
 pub fn fill_frame(layer: &Layer, canvas: Rect) -> Rect {
     let mut frame = canvas;
     // "Align with layer" off: the canvas (the Gradient tool's live gradients).
-    if let LayerContent::Fill(Fill::Gradient { align: false, .. }) = &layer.content {
+    // A lens flare is placed on the canvas whatever its masks reveal.
+    if let LayerContent::Fill(Fill::Gradient { align: false, .. } | Fill::LensFlare(_)) = &layer.content {
         return frame;
     }
     if let Some(m) = &layer.mask
@@ -189,6 +190,8 @@ pub(crate) fn render_fill(f: &Fill, rect: Rect, canvas: Rect, patterns: &pattern
             Some(tile) => Buffer { rect, px: pattern::render(&tile, &pattern::Placement::new(canvas, *link, *phase, *scale, *angle), rect) },
             None => Buffer::transparent(rect),
         },
+        // Placed on the canvas (`fill_frame` gives a flare the whole canvas).
+        Fill::LensFlare(flare) => Buffer { rect, px: crate::lens_flare::render(flare, rect, canvas) },
     }
 }
 

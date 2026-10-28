@@ -145,7 +145,7 @@ pub fn render_cmyk_fill(f: &Fill, rect: Rect, frame: Rect, depth: photocraft_col
             let px = render_ramp(f, rect, frame, Ramp::with_colors(f, native), None);
             surface.write_region(rect, px.as_flattened());
         }
-        Fill::Pattern { .. } => return None,
+        Fill::Pattern { .. } | Fill::LensFlare(_) => return None,
     }
     surface.prune();
     Some(surface)

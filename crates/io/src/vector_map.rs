@@ -309,7 +309,8 @@ pub fn vstk_bytes(stroke: Option<&ShapeStroke>, fill_enabled: bool, dpi: f32) ->
     let paint = stroke.map(|st| &st.paint).unwrap_or(&s.paint);
     let (_, content) = fill_to_desc(paint);
     let class = match s.paint {
-        Fill::Solid(_) => "solidColorLayer",
+        // A flare is never a stroke paint; fill_to_desc writes its stand-in as a solid colour.
+        Fill::Solid(_) | Fill::LensFlare(_) => "solidColorLayer",
         Fill::Gradient { .. } => "gradientLayer",
         Fill::Pattern { .. } => "patternLayer",
     };

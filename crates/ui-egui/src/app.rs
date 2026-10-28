@@ -150,6 +150,7 @@ impl PhotocraftApp {
             text_style_preview: None,
             solid_fill_preview: None,
             pattern_fill_preview: None,
+            lens_flare_preview: None,
             shape_fill_preview: None,
             distort: Default::default(),
             gradient: Default::default(),

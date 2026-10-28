@@ -100,8 +100,8 @@ fn cmyk_pixels(l: &Layer) -> bool {
         LayerContent::Text(_) | LayerContent::Shape(_) | LayerContent::Smart(_) => l.surface().is_none_or(cmyk),
         LayerContent::Fill(f) => match &l.fill_cache {
             Some(c) if c.fill == *f => cmyk(&c.surface),
-            // Solid colours and gradients render natively in CMYK; patterns don't.
-            _ => !matches!(f, photocraft_doc::Fill::Pattern { .. }),
+            // Solid colours and gradients render natively in CMYK; patterns and flares don't.
+            _ => !matches!(f, photocraft_doc::Fill::Pattern { .. } | photocraft_doc::Fill::LensFlare(_)),
         },
         _ => false,
     }
