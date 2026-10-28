@@ -1609,3 +1609,16 @@ fn replace_color_localized_color_clusters() {
     assert!(px(2)[1] > 0.5, "near the point: shifted to green {:?}", px(2));
     assert!(px(38)[0] > 0.9 && px(38)[1] < 0.1, "far away: still red {:?}", px(38));
 }
+
+/// Lens Blur's focal point is a document position: the preview's proxy is k times smaller, so
+/// the point the user clicked must land on the same content there.
+#[test]
+fn lens_blur_focal_point_scales_to_the_preview_proxy() {
+    let mut p = json!({"radius": 20, "focalPoint": [401, 99]});
+    scale_preview_params(LENS_BLUR, &mut p, 4);
+    assert_eq!(p["focalPoint"], json!([100.0, 24.0]));
+    assert_eq!(p["radius"], json!(5.0));
+    let mut p = json!({"focalPoint": [401, 99]});
+    scale_preview_params(LENS_BLUR, &mut p, 1);
+    assert_eq!(p["focalPoint"], json!([401, 99]), "full-size previews keep the point");
+}

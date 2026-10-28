@@ -600,6 +600,97 @@ fn lens_blur_depth_map_keeps_focal_plane_sharp() {
     assert_ne!(out.pixel(30, 10), s.pixel(30, 10), "far plane blurred");
 }
 
+fn lens_depth(radius: f32, focal: f32, depth: Image) -> FilterParams {
+    FilterParams::LensBlur {
+        radius,
+        blades: 6,
+        curvature: 100.0,
+        rotation: 0.0,
+        depth: DepthSource::LayerMask,
+        focal_distance: focal,
+        invert_depth: false,
+        brightness: 0.0,
+        threshold: 255.0,
+        noise: 0.0,
+        distribution: Distribution::Uniform,
+        monochromatic: false,
+        seed: 0,
+        depth_map: Some(Arc::new(depth)),
+    }
+}
+
+/// Left of `split` red and near (depth 0), right of it blue and far (depth 1).
+fn near_far(r: Rect, split: i32) -> (Surface, Image) {
+    let mut s = Surface::new(fmt(SampleType::F32));
+    let mut d = Image::new(r, 1);
+    for y in r.y0..r.y1 {
+        for x in r.x0..r.x1 {
+            let near = x < split;
+            s.write_pixel(x, y, &if near { [1.0, 0.0, 0.0, 1.0] } else { [0.0, 0.0, 1.0, 1.0] });
+            d.data[(y - r.y0) as usize * r.width() as usize + (x - r.x0) as usize] = if near { 0.0 } else { 1.0 };
+        }
+    }
+    (s, d)
+}
+
+/// A blurred foreground spreads over the sharp background behind it, as through a real lens,
+/// instead of stopping at a hard edge.
+#[test]
+fn lens_blur_foreground_spills_over_the_focal_plane() {
+    let (s, d) = near_far(R, 20);
+    // Focus on the far (blue) side: the near red blurs.
+    let out = run(&s, &lens_depth(6.0, 255.0, d));
+    let px = out.pixel(22, 15);
+    assert!(px[0] > 0.1, "red spills two pixels into the sharp side: {px:?}");
+    let far = out.pixel(30, 15);
+    assert!(far[0] < 1e-3 && (far[2] - 1.0).abs() < 1e-3, "beyond the iris the background stays sharp: {far:?}");
+}
+
+/// A sharp foreground doesn't bleed into the blurred background next to it: the background
+/// layer is blurred on its own and its holes are filled from itself.
+#[test]
+fn lens_blur_sharp_foreground_does_not_halo_into_the_background() {
+    let (s, d) = near_far(R, 20);
+    // Focus on the near (red) side: the far blue blurs.
+    let out = run(&s, &lens_depth(6.0, 0.0, d));
+    assert_eq!(out.pixel(18, 15), s.pixel(18, 15), "the focal plane is untouched");
+    let px = out.pixel(21, 15);
+    assert!(px[0] < 0.02 && px[2] > 0.98, "background next to the edge stays blue: {px:?}");
+}
+
+/// Coarse-grid layers (big irises) and per-layer windows give the same result whatever the tiling,
+/// and a flat image stays flat through the layer compositing.
+#[test]
+fn lens_blur_depth_layers_are_tile_independent_and_flat_safe() {
+    let r = Rect::new(0, 0, 120, 90);
+    let s = pattern(SampleType::F32, r);
+    let mut d = Image::new(r, 1);
+    for y in 0..90 {
+        for x in 0..120 {
+            d.data[(y * 120 + x) as usize] = ((x as f32 / 119.0) + 0.3 * ((y as f32) * 0.2).sin()).clamp(0.0, 1.0);
+        }
+    }
+    for radius in [5.0, 40.0] {
+        let p = lens_depth(radius, 100.0, d.clone());
+        let area = output_area(&p, s.content_bounds(), r, None);
+        let a = apply_tiled(&s, &p, area, r, None, 256, None);
+        let b = apply_tiled(&s, &p, area, r, None, 23, None);
+        let diff = max_diff(&a.read_region(r), &b.read_region(r));
+        assert!(diff < 1e-3, "radius {radius}: tiles differ by {diff}");
+    }
+    let c = [0.3, 0.55, 0.8, 1.0];
+    let flat = flat(SampleType::F32, r, c);
+    let p = lens_depth(40.0, 100.0, d);
+    // In a document the canvas edge repeats, so the corners stay flat too.
+    let out = apply_in(&flat, &p, output_area(&p, flat.content_bounds(), r, None), r, None, r);
+    for (x, y) in [(0, 0), (60, 45), (119, 89)] {
+        let px = out.pixel(x, y);
+        for k in 0..4 {
+            assert!((px[k] - c[k]).abs() < 2e-3, "({x}, {y}): {px:?}");
+        }
+    }
+}
+
 #[test]
 fn gallery_blurs_follow_their_geometry() {
     let s = pattern(SampleType::F32, R);

@@ -129,10 +129,21 @@ pub(crate) fn window(app: &PhotocraftApp, dialog: u64, ui: &mut egui::Ui, f: &mu
         cx -= d.x / zoom;
         cy -= d.y / zoom;
     }
+    // Lens Blur's Set Focal Point: the click picks the focal point instead of centring the view.
+    let setting_focal_point = f.get(crate::filter_dialog::SETTING_FOCAL_POINT).and_then(Value::as_bool) == Some(true);
+    if setting_focal_point && response.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+    }
     if response.clicked()
         && let Some(p) = response.interact_pointer_pos()
     {
-        (cx, cy) = point_to_source(p - rect.min, x0, y0, zoom, doc);
+        let (px, py) = point_to_source(p - rect.min, x0, y0, zoom, doc);
+        if setting_focal_point {
+            f.insert(crate::filter_dialog::FOCAL_POINT.into(), json!([px.floor().min(doc.x - 1.0).max(0.0), py.floor().min(doc.y - 1.0).max(0.0)]));
+            f.insert(crate::filter_dialog::SETTING_FOCAL_POINT.into(), json!(false));
+        } else {
+            (cx, cy) = (px, py);
+        }
     }
     (cx, cy) = clamp_center(cx, cy, doc.x, doc.y);
 

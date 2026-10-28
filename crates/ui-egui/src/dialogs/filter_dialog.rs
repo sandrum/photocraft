@@ -654,6 +654,37 @@ fn uses_logarithmic_slider(min: f32, max: f32) -> bool {
 }
 
 const LENS_BLUR: &str = "filter.blur.lensBlur";
+/// Lens Blur's focal point (`[x, y]` in document pixels), set by clicking the preview.
+pub(crate) const FOCAL_POINT: &str = "focalPoint";
+/// While true, a click on the filter preview sets [`FOCAL_POINT`] instead of centring the view.
+pub(crate) const SETTING_FOCAL_POINT: &str = "__settingFocalPoint";
+
+/// Lens Blur's Set Focal Point, above Blur Focal Distance as in Photoshop: press it, then click
+/// the preview, and the depth under that point comes into focus. The point stays until the
+/// focal distance slider is moved.
+fn focal_point_row(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
+    let t = Tokens::get(ui.ctx());
+    let mut armed = f.get(SETTING_FOCAL_POINT).and_then(Value::as_bool) == Some(true);
+    let point = f.get(FOCAL_POINT).and_then(Value::as_array).and_then(|a| Some((a.first()?.as_f64()?, a.get(1)?.as_f64()?)));
+    // Without a depth map every pixel blurs alike: there is no depth to pick.
+    let has_depth = f.get("depthMap").and_then(Value::as_str).is_some_and(|d| d != "none");
+    armed &= has_depth;
+    ui.horizontal(|ui| {
+        if !has_depth {
+            ui.disable();
+        }
+        if ui.selectable_label(armed, tl!("Set Focal Point")).on_hover_text(tl!("Click the preview to focus on the depth there")).clicked() {
+            armed = !armed;
+        }
+        if let Some((x, y)) = point {
+            ui.label(egui::RichText::new(format!("{x:.0}, {y:.0}")).color(t.text_dim));
+            if ui.small_button("×").on_hover_text(tl!("Clear the focal point")).clicked() {
+                f.remove(FOCAL_POINT);
+            }
+        }
+    });
+    f.insert(SETTING_FOCAL_POINT.into(), json!(armed));
+}
 
 /// Lens Blur's Depth Map Source lists the document's alpha channels after None, Transparency
 /// and Layer Mask, as in Photoshop (#7400): their names go to `__channels`. A `channel` source
@@ -830,7 +861,11 @@ pub fn body(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
         }
         match p.kind {
             Kind::Range { min, max, default } => {
+                if cmd == LENS_BLUR && p.key == "focalDistance" {
+                    focal_point_row(ui, f);
+                }
                 let mut v = f.get(&p.key).and_then(Value::as_f64).unwrap_or(default as f64) as f32;
+                let before = v;
                 if cmd == "image.mode.indexedColor" && p.key == "colors" {
                     let mut count = v.round().clamp(2.0, 256.0) as u32;
                     crate::widgets::color_count_row(ui, &label(&p.key), &mut count);
@@ -876,6 +911,10 @@ pub fn body(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
                         crate::widgets::slider_row_with(ui, &label(&p.key), &mut v, min..=max, unit, None, gestures);
                     }
                 });
+                // Dragging Blur Focal Distance takes over from a focal point set on the preview.
+                if cmd == LENS_BLUR && p.key == "focalDistance" && v != before {
+                    f.remove(FOCAL_POINT);
+                }
                 // Small ranges (0–1 thresholds and centres) keep the two decimals their field shows.
                 let scale = if max - min <= 10.0 { 100.0 } else { 10.0 };
                 f.insert(p.key, json!((v * scale).round() / scale));
@@ -1249,6 +1288,17 @@ fn scale_preview_params(command: &str, params: &mut Value, k: u32) {
                 // sign: the floor that keeps a radius positive turned them into +0.1 (#2063).
                 let x = x / k as f64;
                 *v = json!(if x > 0.0 { x.max(floor) } else { minimum.map_or(x, |m| x.max(m)) });
+            }
+        }
+    }
+    // Lens Blur's focal point is a document position: the proxy is k times smaller.
+    if command == LENS_BLUR
+        && k > 1
+        && let Some(point) = params.get_mut(FOCAL_POINT).and_then(Value::as_array_mut)
+    {
+        for c in point.iter_mut() {
+            if let Some(x) = c.as_f64() {
+                *c = json!((x / k as f64).floor());
             }
         }
     }
