@@ -74,7 +74,7 @@ fn smooth_len(n: usize) -> usize {
     loop {
         let mut r = m;
         for p in [2, 3, 5] {
-            while r % p == 0 {
+            while r.is_multiple_of(p) {
                 r /= p;
             }
         }
@@ -178,16 +178,7 @@ impl Bbox {
 /// far). Returns the premultiplied result over `out` (which lies inside `win`, at least the
 /// largest kernel radius from its edges where the image continues).
 #[allow(clippy::too_many_arguments)]
-pub(super) fn layered(
-    p: &[f32],
-    depth: &[f32],
-    win: Rect,
-    out: Rect,
-    n: usize,
-    focal: f32,
-    rmax: f32,
-    inside: &impl Fn(f32, f32) -> bool,
-) -> Vec<f32> {
+pub(super) fn layered(p: &[f32], depth: &[f32], win: Rect, out: Rect, n: usize, focal: f32, rmax: f32, inside: &impl Fn(f32, f32) -> bool) -> Vec<f32> {
     let (ww, wh) = (win.width() as usize, win.height() as usize);
     let (ow, oh) = (out.width() as usize, out.height() as usize);
     let (ox, oy) = ((out.x0 - win.x0) as usize, (out.y0 - win.y0) as usize);

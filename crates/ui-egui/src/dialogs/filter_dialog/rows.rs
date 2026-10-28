@@ -19,7 +19,7 @@ use craft::color_ui::ui::{LutChoice, LutPicker, LutPickerOutput};
 use craft::imaging::ui::color_range::{ColorSamples, SampleSign, SampleTool};
 use craft::keymap::Mods;
 use craft::theme::Srgba;
-use craft::ui::buttons::ToggleButton;
+use craft::ui::buttons::{IconButton, ToggleButton};
 use craft::ui::choice::Swatch;
 use craft::ui::contract::{Bind, Entry, Outcome as _, Props as _, Show as _};
 use craft::ui::dialog::{DialogId, StackDialog as _};
@@ -201,7 +201,7 @@ pub(crate) fn channel_index(v: &Value, names: &[String]) -> Option<usize> {
 
 /// Lens Blur's Depth Map Source lists the document's alpha channels after None, Transparency
 /// and Layer Mask, as in Photoshop (#7400).
-fn lens_blur(app: &PhotocraftApp, params: &mut [Param]) {
+fn lens_blur(app: &PhotocraftApp, params: &mut Vec<Param>) {
     let names = channel_names(app);
     if let Some(depth_map) = row(params, "depthMap") {
         if let ParamKind::Choice { options, default, .. } = &mut depth_map.kind {
@@ -212,6 +212,58 @@ fn lens_blur(app: &PhotocraftApp, params: &mut [Param]) {
         }
         *depth_map = depth_map.clone().not_remembered();
     }
+    // Set Focal Point sits above Blur Focal Distance, as in Photoshop.
+    let at = params.iter().position(|p| p.key == "focalDistance").unwrap_or(params.len());
+    params.insert(at, focal_point_row());
+}
+
+/// Lens Blur's focal point, `[x, y]` in document pixels: set by a click on the preview while Set Focal Point is on.
+pub(crate) const FOCAL_POINT: &str = "focalPoint";
+/// Set Focal Point is on: the next click on the preview sets [`FOCAL_POINT`] instead of centring the view.
+pub(crate) const SETTING_FOCAL_POINT: &str = "__settingFocalPoint";
+
+/// Whether Lens Blur's values `fields` have a depth map: without one every pixel blurs alike and there is no depth to
+/// pick.
+pub(crate) fn has_depth_map(fields: &DialogFields) -> bool {
+    fields.text("depthMap").is_some_and(|source| source != "none")
+}
+
+/// Whether Set Focal Point is on in Lens Blur's values `fields` (never without a depth map).
+pub(crate) fn setting_focal_point(fields: &DialogFields) -> bool {
+    has_depth_map(fields) && fields.bool(SETTING_FOCAL_POINT) == Some(true)
+}
+
+/// Lens Blur's Set Focal Point: turn it on, click the preview, and the depth under the click comes into focus. The
+/// point shows beside the button until it is cleared or Blur Focal Distance is moved. Off without a depth map.
+fn focal_point_row() -> Param {
+    Param::custom(SETTING_FOCAL_POINT, Label::from(tl!("Focal Point")), |ui, fields, _cx| {
+        let depth = has_depth_map(fields);
+        let armed = setting_focal_point(fields);
+        let point = fields.point(FOCAL_POINT);
+        let response = ui
+            .horizontal(|ui| {
+                let toggle = ToggleButton::new(Label::from(tl!("Set Focal Point")), Bind::given(armed)).enabled(depth).id_salt("setFocalPoint").show(ui);
+                if let Some(on) = toggle.value().copied() {
+                    fields.set(SETTING_FOCAL_POINT, on);
+                }
+                if let Some([x, y]) = point {
+                    let t = crate::theme::Tokens::get(ui.ctx());
+                    ui.label(egui::RichText::new(format!("{x:.0}, {y:.0}")).color(t.text_dim));
+                    let clear = IconButton::new(IconId::new("x")).label(Label::from(tl!("Clear the focal point"))).id_salt("clearFocalPoint").show(ui);
+                    if clear.clicked() {
+                        fields.remove(FOCAL_POINT);
+                    }
+                }
+            })
+            .response;
+        if !depth && fields.bool(SETTING_FOCAL_POINT) == Some(true) {
+            fields.set(SETTING_FOCAL_POINT, false);
+        }
+        response
+    })
+    .opens_with(false)
+    .not_remembered()
+    .tooltip(tl!("Click the preview to focus on the depth there"))
 }
 
 /// Opens Lens Blur's values on the menu's own ids: a `channel` source with its `depthChannel` (an index or a

@@ -23,7 +23,7 @@ use serde_json::{Map, Value, json};
 use crate::PhotocraftApp;
 
 mod rows;
-pub(crate) use rows::{REPLACE_COLOR, replace_color_sample};
+pub(crate) use rows::{FOCAL_POINT, LENS_BLUR, REPLACE_COLOR, SETTING_FOCAL_POINT, replace_color_sample, setting_focal_point};
 
 const MATCH_COLOR: &str = "image.adjustments.matchColor";
 #[cfg(test)]
@@ -506,11 +506,14 @@ fn builder(
     let key = command.to_owned();
     let canvas = app.session.active_index().map(|idx| crate::canvas::document_display::CanvasHost::primary(app, idx).canvas_id());
     move |fields: &mut DialogFields| {
+        // While Lens Blur's Set Focal Point is on, a click on the preview picks the point instead of centring the view.
+        let picks_point = key == LENS_BLUR && setting_focal_point(fields);
         let mut dialog = ParamDialog::command(key.clone(), title.clone(), params.clone())
             .values(Bind::bound(fields))
             .reset_to(reset.clone())
             .layout(ParamLayout::Stacked)
             .previews(previews(&key))
+            .click_centres(!picks_point)
             .alert_title(tl!("PhotoCraft"));
         if let Some(canvas) = canvas {
             dialog = dialog.canvas(canvas);
@@ -1176,6 +1179,17 @@ fn scale_preview_params(command: &str, params: &mut Value, k: u32) {
                 // sign: the floor that keeps a radius positive turned them into +0.1 (#2063).
                 let x = x / k as f64;
                 *v = json!(if x > 0.0 { x.max(floor) } else { minimum.map_or(x, |m| x.max(m)) });
+            }
+        }
+    }
+    // Lens Blur's focal point is a document position: the proxy is k times smaller.
+    if command == LENS_BLUR
+        && k > 1
+        && let Some(point) = params.get_mut(FOCAL_POINT).and_then(Value::as_array_mut)
+    {
+        for c in point.iter_mut() {
+            if let Some(x) = c.as_f64() {
+                *c = json!((x / f64::from(k)).floor());
             }
         }
     }

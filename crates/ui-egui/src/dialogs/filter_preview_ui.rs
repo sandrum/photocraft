@@ -8,7 +8,7 @@
 //! the pointer is a small square there, and a press centres the pane on that document point ([`centre_on`], #9648).
 
 use craft::ui::dialog::{DialogId, StackDialog as _};
-use craft::ui::patterns::form_dialogs::HostedParamDialog;
+use craft::ui::patterns::form_dialogs::{FieldValue, HostedParamDialog};
 use egui::load::SizedTexture;
 use egui::{Pos2, pos2};
 use photocraft_doc::Document;
@@ -79,7 +79,39 @@ pub(crate) fn feed(app: &mut PhotocraftApp, ctx: &egui::Context) {
         if let Some(dialog) = app.framework.dialogs.get_mut_by_id::<HostedParamDialog>(id) {
             dialog.set_preview(picture);
         }
+        pick_focal_point(app, id);
     }
+}
+
+/// Lens Blur's Set Focal Point: a click on the preview while it is on sets the focal point to the document pixel under
+/// the click and turns Set Focal Point off. The click is taken either way, so one made before Set Focal Point was turned
+/// on never lands later; without Set Focal Point the pane has already centred on it.
+fn pick_focal_point(app: &mut PhotocraftApp, id: DialogId) {
+    let Some(dialog) = app.framework.dialogs.get_by_id::<HostedParamDialog>(id) else { return };
+    if dialog.key() != Some(crate::filter_dialog::LENS_BLUR) {
+        return;
+    }
+    let armed = crate::filter_dialog::setting_focal_point(dialog.fields());
+    let Some(subject) = subject(app, dialog) else { return };
+    let Some(doc) = app.session.active().map(|st| st.doc.clone()) else { return };
+    let k = picture_factor(app, id, dialog, &doc, &subject);
+    let Some(dialog) = app.framework.dialogs.get_mut_by_id::<HostedParamDialog>(id) else { return };
+    let Some(click) = dialog.take_preview_click() else { return };
+    if !armed {
+        return;
+    }
+    let Some(point) = focal_pixel(document_point(click, k), [doc.size.width, doc.size.height]) else { return };
+    dialog.set_field(crate::filter_dialog::FOCAL_POINT, FieldValue::Point(point));
+    dialog.set_field(crate::filter_dialog::SETTING_FOCAL_POINT, FieldValue::Bool(false));
+}
+
+/// The document pixel a focal point at `point` names in a `size`d document: floored and kept on the image; `None` for a
+/// point that is not finite or an empty document.
+fn focal_pixel(point: [f64; 2], size: [u32; 2]) -> Option<[f64; 2]> {
+    if size.contains(&0) || !point.iter().all(|v| v.is_finite()) {
+        return None;
+    }
+    Some([point[0].floor().clamp(0.0, f64::from(size[0] - 1)), point[1].floor().clamp(0.0, f64::from(size[1] - 1))])
 }
 
 /// The picture of dialog `id`: `None` when the dialog has no preview pane, `Some(None)` when it has one and there
@@ -164,7 +196,6 @@ fn picture_point(document: [f64; 2], k: u32) -> Pos2 {
 }
 
 /// The document point under `picture`, a point of a picture reduced `k` times: the inverse of [`picture_point`].
-#[cfg(test)]
 fn document_point(picture: Pos2, k: u32) -> [f64; 2] {
     let k = f64::from(k.max(1));
     [f64::from(picture.x) * k, f64::from(picture.y) * k]
@@ -444,5 +475,17 @@ mod tests {
         crate::filter_dialog::open(&mut app, "image.rotation.arbitrary").unwrap();
         assert_eq!(locator(&app), None);
         assert!(!centre_on(&mut app, [20.0, 20.0]));
+    }
+
+    #[test]
+    fn a_focal_point_is_a_whole_pixel_on_the_image() {
+        assert_eq!(focal_pixel([10.7, 3.2], [64, 48]), Some([10.0, 3.0]));
+        assert_eq!(focal_pixel([-5.0, 99.0], [64, 48]), Some([0.0, 47.0]), "kept on the image");
+        assert_eq!(focal_pixel([1e40, -1e40], [64, 48]), Some([63.0, 0.0]));
+        assert_eq!(focal_pixel([f64::NAN, 1.0], [64, 48]), None);
+        assert_eq!(focal_pixel([f64::INFINITY, 1.0], [64, 48]), None);
+        assert_eq!(focal_pixel([1.0, 1.0], [0, 48]), None, "an empty document has no pixel");
+        // A click on a picture reduced 4 times lands on the document pixel it shows.
+        assert_eq!(focal_pixel(document_point(pos2(10.5, 3.0), 4), [64, 48]), Some([42.0, 12.0]));
     }
 }

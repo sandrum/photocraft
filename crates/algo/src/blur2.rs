@@ -411,14 +411,16 @@ pub(crate) fn lens_blur(src: &Image, out: Rect, ctx: &Ctx, spec: &LensSpec) -> V
         DepthSource::None => None,
         DepthSource::Transparency if !ctx.alpha => None,
         DepthSource::Transparency | DepthSource::LayerMask | DepthSource::Channel => {
-            // Where the map has no pixels, blur fully (the depth farthest from the focal plane).
+            // Past the map's edge (the window's halo beyond the canvas) its edge pixels repeat, as
+            // the image's do. Without a map, blur fully (the depth farthest from the focal plane).
             let missing = if focal <= 0.5 { 1.0 } else { 0.0 };
             let mut d = Vec::with_capacity(ww * wh);
             for y in win.y0..win.y1 {
                 for x in win.x0..win.x1 {
-                    let v = match spec.depth {
-                        DepthSource::Transparency => Some(src.get(x, y, n - 1)),
-                        _ => spec.depth_map.and_then(|m| m.rect.contains(x, y).then(|| m.get(x, y, 0))),
+                    let v = match (spec.depth, spec.depth_map) {
+                        (DepthSource::Transparency, _) => Some(src.get(x, y, n - 1)),
+                        (_, Some(m)) if !m.rect.is_empty() => Some(m.get(x.clamp(m.rect.x0, m.rect.x1 - 1), y.clamp(m.rect.y0, m.rect.y1 - 1), 0)),
+                        _ => None,
                     };
                     d.push(match v {
                         Some(v) if spec.invert => 1.0 - v,

@@ -1,0 +1,119 @@
+//! Lens Blur's Set Focal Point: with it on, a click on the dialog's preview pane sets `focalPoint` to the document
+//! pixel under the click and turns it off; without it, a click only moves the view. OK sends the point to the command.
+//! Public control API and the accessibility tree only; no GPU adapter is needed.
+
+use egui::accesskit::Role;
+use egui::vec2;
+use egui_kittest::Harness;
+use egui_kittest::kittest::Queryable as _;
+use photocraft_ui_egui::{
+    PhotocraftApp,
+    control::{ControlRequest, Reply, handle},
+    dialogs, i18n,
+    theme::AppTheme,
+};
+use serde_json::{Value, json};
+
+const COMMAND: &str = "filter.blur.lensBlur";
+const SIZE: [u32; 2] = [64, 48];
+
+fn harness() -> Harness<'static, Box<PhotocraftApp>> {
+    let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
+    app.run("file.new", json!({"width": SIZE[0], "height": SIZE[1], "background": "transparent"})).unwrap();
+    app.run("paint.stroke", json!({"points": [[16, 16, 1], [48, 32, 1]], "size": 12, "color": "#ff8000"})).unwrap();
+    let h = Harness::builder().with_context(app.ctx().clone()).with_size(vec2(1200.0, 900.0)).build_ui_state(
+        |ui, app: &mut Box<PhotocraftApp>| {
+            let _language = i18n::language_scope(i18n::Lang::EN);
+            dialogs::run(app, ui);
+        },
+        app,
+    );
+    PhotocraftApp::setup_context(&h.ctx, AppTheme::pro());
+    h
+}
+
+/// Sends one control request, requires success and returns its `result`.
+fn control(h: &mut Harness<'_, Box<PhotocraftApp>>, method: &str, params: Value) -> Value {
+    let ctx = h.ctx.clone();
+    let (request, _rx) = ControlRequest::new(method, params);
+    let Reply::Done(reply) = handle(h.state_mut(), &ctx, &request) else { panic!("{method} did not finish") };
+    assert_eq!(reply["ok"], true, "{method}: {reply}");
+    h.run_steps(3);
+    reply["result"].clone()
+}
+
+/// The value under `key` anywhere in an inspect reply.
+fn find<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
+    match value {
+        Value::Object(map) => map.get(key).or_else(|| map.values().find_map(|v| find(v, key))),
+        Value::Array(items) => items.iter().find_map(|v| find(v, key)),
+        _ => None,
+    }
+}
+
+fn focal_point(h: &mut Harness<'_, Box<PhotocraftApp>>) -> Option<Value> {
+    let inspected = control(h, "ui.inspect", json!({}));
+    find(&inspected, "focalPoint").filter(|v| !v.is_null()).cloned()
+}
+
+/// Opens Lens Blur with the layer's transparency as its depth map.
+fn open(h: &mut Harness<'_, Box<PhotocraftApp>>) -> Value {
+    let opened = control(h, "ui.menu.invoke", json!({"id": COMMAND}));
+    let id = opened["dialog"].clone();
+    control(h, "ui.dialog.set", json!({"dialog": id, "field": "depthMap", "value": "transparency"}));
+    h.run_steps(4);
+    id
+}
+
+/// Turns Set Focal Point on (its button is named by its row, Focal Point).
+fn set_focal_point(h: &mut Harness<'_, Box<PhotocraftApp>>) {
+    h.get_by_role_and_label(Role::Button, "Focal Point").click();
+    h.run_steps(3);
+}
+
+fn click_preview(h: &mut Harness<'_, Box<PhotocraftApp>>) {
+    h.get_by_role_and_label(Role::Group, "Preview").click();
+    h.run_steps(4);
+}
+
+#[test]
+fn set_focal_point_then_a_preview_click_picks_the_pixel_there() {
+    let mut h = harness();
+    let id = open(&mut h);
+    click_preview(&mut h);
+    assert_eq!(focal_point(&mut h), None, "without Set Focal Point a click only moves the view");
+
+    set_focal_point(&mut h);
+    click_preview(&mut h);
+    let point = focal_point(&mut h).expect("the click set the focal point");
+    let [x, y] = [point[0].as_f64().unwrap(), point[1].as_f64().unwrap()];
+    assert!((0.0..f64::from(SIZE[0])).contains(&x) && (0.0..f64::from(SIZE[1])).contains(&y), "on the image: {point}");
+    assert_eq!((x.fract(), y.fract()), (0.0, 0.0), "a whole pixel: {point}");
+    assert!(h.query_by_label("Clear the focal point").is_some(), "the point shows with its clear button");
+
+    // Set Focal Point turned itself off: the next click moves the view and keeps the point.
+    click_preview(&mut h);
+    assert_eq!(focal_point(&mut h), Some(point.clone()));
+
+    let before = h.state().session.active().unwrap().revision;
+    control(&mut h, "ui.dialog.confirm", json!({"dialog": id}));
+    assert!(h.state().session.active().unwrap().revision > before, "OK applied Lens Blur with the focal point");
+}
+
+#[test]
+fn set_focal_point_needs_a_depth_map_and_clear_forgets_the_point() {
+    let mut h = harness();
+    let id = open(&mut h);
+    set_focal_point(&mut h);
+    click_preview(&mut h);
+    assert!(focal_point(&mut h).is_some());
+    h.get_by_label("Clear the focal point").click();
+    h.run_steps(3);
+    assert_eq!(focal_point(&mut h), None, "the clear button forgets the point");
+
+    // Without a depth map every pixel blurs alike: Set Focal Point is off and a click picks nothing.
+    control(&mut h, "ui.dialog.set", json!({"dialog": id, "field": "depthMap", "value": "none"}));
+    set_focal_point(&mut h);
+    click_preview(&mut h);
+    assert_eq!(focal_point(&mut h), None);
+}

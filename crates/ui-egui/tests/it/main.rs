@@ -28,6 +28,7 @@ mod healing_reset_tip;
 #[allow(dead_code)]
 mod interactive_bench_reporting;
 mod layout_perf;
+mod lens_blur_focal_point;
 mod live_stroke_canvas;
 mod magnetic_lasso_right_click;
 mod paint_bucket_all_layers;
