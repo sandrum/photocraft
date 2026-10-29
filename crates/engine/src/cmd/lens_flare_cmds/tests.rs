@@ -26,7 +26,7 @@ fn new_flare_layer_lights_the_image_and_undoes_in_one_step() {
         s.execute("edit.fill", json!({"color": "#202020"})).ok();
         let before = pixel(&s, 20, 11);
         let count = s.active().unwrap().history.entries().len();
-        let r = s.execute(CREATE, json!({"preset": "White Source", "x": 0.25, "y": 0.25})).unwrap();
+        let r = s.execute(CREATE, json!({"preset": "Bare Bulb", "x": 0.25, "y": 0.25})).unwrap();
         let id = r["layer"].as_u64().unwrap();
         let st = s.active().unwrap();
         let l = st.doc.layer(LayerId(id)).unwrap();
@@ -63,7 +63,7 @@ fn set_edits_controls_and_preset_keeping_position() {
 #[test]
 fn preview_matches_what_the_commands_commit() {
     let mut s = session(16);
-    let p = json!({"preset": "Hexagons", "x": 0.7, "y": 0.2, "artifacts": 2.0});
+    let p = json!({"preset": "Six Blades", "x": 0.7, "y": 0.2, "artifacts": 2.0});
     let shown = preview(&s, CREATE, &p).unwrap();
     s.execute(CREATE, p).unwrap();
     let all = Rect::new(0, 0, 80, 45);

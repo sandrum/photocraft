@@ -559,7 +559,7 @@ mod tests {
 
     #[test]
     fn controls_move_and_scale_the_light() {
-        let base = lens_flare::preset("White Source").map(|p| p.flare()).unwrap_or_else(|| lens_flare::LensFlare::new(FlareCategory::SunFlare, "x", vec![]));
+        let base = lens_flare::preset("Bare Bulb").map(|p| p.flare()).unwrap_or_else(|| lens_flare::LensFlare::new(FlareCategory::SunFlare, "x", vec![]));
         let mut f = base.clone();
         f.source = (0.75, 0.5);
         let px = render(&f, canvas(), canvas());
@@ -576,7 +576,7 @@ mod tests {
 
     #[test]
     fn tint_moves_colour_towards_the_hue() {
-        let base = lens_flare::preset("White Line").map(|p| p.flare()).unwrap_or_else(|| lens_flare::LensFlare::new(FlareCategory::Streak, "x", vec![]));
+        let base = lens_flare::preset("Silver Thread").map(|p| p.flare()).unwrap_or_else(|| lens_flare::LensFlare::new(FlareCategory::Streak, "x", vec![]));
         let mut red = base.clone();
         red.source = (0.5, 0.5);
         red.hue = 0.0;

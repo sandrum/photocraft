@@ -60,7 +60,7 @@ fn new_lens_flare_opens_the_dialog_previews_and_ok_is_one_step() {
 fn content_options_reopen_the_flare_and_keep_its_elements() {
     let mut app = app();
     let ctx = egui::Context::default();
-    let id = app.run(cmds::CREATE, json!({"preset": "Hexagons", "x": 0.2})).unwrap()["layer"].as_u64().unwrap();
+    let id = app.run(cmds::CREATE, json!({"preset": "Six Blades", "x": 0.2})).unwrap()["layer"].as_u64().unwrap();
     // Hand-tuned elements (e.g. from a file) survive an edit that keeps the preset.
     let mut tuned = flare(&app, id);
     tuned.elements.truncate(2);
@@ -74,7 +74,7 @@ fn content_options_reopen_the_flare_and_keep_its_elements() {
     let dialog = crate::menus::invoke(&mut app, &ctx, "layer.layerContentOptions", serde_json::Value::Null).unwrap()["dialog"].as_u64().unwrap();
     let f = &app.ui.dialog_mut(dialog).unwrap().fields;
     assert!(owns(f));
-    assert_eq!((f["preset"].clone(), f["x"].clone(), f["__tab"].clone()), (json!("Hexagons"), json!(0.2f32), json!("spherical")));
+    assert_eq!((f["preset"].clone(), f["x"].clone(), f["__tab"].clone()), (json!("Six Blades"), json!(0.2f32), json!("spherical")));
     assert!(display_doc(&mut app, 0).is_none(), "unchanged: no preview");
     crate::dialogs::confirm(&mut app, dialog).unwrap();
     assert_eq!(steps(&app), count, "unchanged OK is no step");
@@ -86,7 +86,7 @@ fn content_options_reopen_the_flare_and_keep_its_elements() {
     // Cancel changes nothing; a stale dialog never edits another document.
     let before = app.session.active().unwrap().doc.clone();
     let dialog = open(&mut app).unwrap();
-    set(&mut app, dialog, json!({"preset": "White Line"}));
+    set(&mut app, dialog, json!({"preset": "Silver Thread"}));
     assert!(display_doc(&mut app, 0).is_some());
     crate::dialogs::cancel(&mut app, dialog).unwrap();
     assert!(Arc::ptr_eq(&before, &app.session.active().unwrap().doc));
@@ -95,7 +95,7 @@ fn content_options_reopen_the_flare_and_keep_its_elements() {
     app.run("file.new", json!({"width": 4, "height": 4})).unwrap();
     assert!(crate::dialogs::confirm(&mut app, dialog).is_err());
     // Explicit params run the engine directly; no document is an error, not a dialog.
-    let r = crate::menus::invoke(&mut app, &ctx, cmds::CREATE, json!({"preset": "Glow Dot"})).unwrap();
+    let r = crate::menus::invoke(&mut app, &ctx, cmds::CREATE, json!({"preset": "Pinprick"})).unwrap();
     assert!(r["layer"].as_u64().is_some());
     let mut empty = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
     assert!(crate::menus::invoke(&mut empty, &ctx, cmds::CREATE, json!({})).is_err());
@@ -118,11 +118,11 @@ fn the_dialog_draws_and_a_thumbnail_click_picks_the_preset() {
         h.run_steps(3);
     }
     use egui_kittest::kittest::Queryable;
-    h.get_by_label("Space Lens").click();
+    h.get_by_label("Orbital").click();
     h.run_steps(3);
-    assert_eq!(h.state_mut().ui.dialog_mut(dialog).unwrap().fields["preset"], json!("Space Lens"));
+    assert_eq!(h.state_mut().ui.dialog_mut(dialog).unwrap().fields["preset"], json!("Orbital"));
     crate::dialogs::confirm(h.state_mut(), dialog).unwrap();
     h.run_steps(3);
     let st = h.state().session.active().unwrap();
-    assert!(matches!(&st.doc.layer(st.active_layer.unwrap()).unwrap().content, LayerContent::Fill(Fill::LensFlare(f)) if f.preset == "Space Lens"));
+    assert!(matches!(&st.doc.layer(st.active_layer.unwrap()).unwrap().content, LayerContent::Fill(Fill::LensFlare(f)) if f.preset == "Orbital"));
 }

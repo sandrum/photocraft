@@ -116,7 +116,7 @@ impl TextureKind {
     }
 }
 
-/// The texture layer of a flare (LensFlare Studio's Textures tab).
+/// The texture layer of a flare (the dialog's Textures tab).
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FlareTexture {
@@ -381,7 +381,7 @@ pub static PRESETS: &[FlarePreset] = &[
     p!(Anamorphic, "Gold Line", with(vec![core(9.0, 1.0, WARM), glow(55.0, 0.4, GOLD), streak(800.0, 2.5, 0.85, GOLD), streak(300.0, 9.0, 0.2, ORANGE)], oval_ghosts(GOLD))),
     p!(Anamorphic, "Cyan Beam", vec![core(8.0, 1.0, WHITE), glow(40.0, 0.35, CYAN), streak(1100.0, 2.0, 1.0, CYAN), streak(1100.0, 14.0, 0.12, CYAN), ghost(1.3, 30.0, 0.06, CYAN)]),
     p!(Anamorphic, "Violet Edge", with(vec![core(10.0, 1.0, WHITE), glow(70.0, 0.4, VIOLET), streak(850.0, 3.0, 0.8, VIOLET), streak(350.0, 12.0, 0.2, MAGENTA)], oval_ghosts(VIOLET))),
-    p!(Anamorphic, "Red Pulse", vec![core(9.0, 1.0, [1.0, 0.8, 0.7]), glow(60.0, 0.5, RED), streak(900.0, 3.0, 0.9, RED), streak(250.0, 18.0, 0.25, RED), soft_ghost(0.9, 60.0, 0.06, RED), soft_ghost(1.7, 30.0, 0.08, ORANGE)]),
+    p!(Anamorphic, "Crimson Bar", vec![core(9.0, 1.0, [1.0, 0.8, 0.7]), glow(60.0, 0.5, RED), streak(900.0, 3.0, 0.9, RED), streak(250.0, 18.0, 0.25, RED), soft_ghost(0.9, 60.0, 0.06, RED), soft_ghost(1.7, 30.0, 0.08, ORANGE)]),
     p!(Anamorphic, "Ice Bar", vec![core(7.0, 1.0, WHITE), glow(35.0, 0.3, COOL), streak(1000.0, 1.5, 1.0, COOL), streak(500.0, 5.0, 0.3, BLUE), ghost(0.6, 6.0, 0.15, COOL), ghost(1.4, 10.0, 0.1, BLUE)]),
     p!(Anamorphic, "Ember Strip", with(vec![core(11.0, 1.0, WARM), glow(80.0, 0.45, ORANGE), streak(700.0, 4.0, 0.75, ORANGE), rays(24, 90.0, 0.15, GOLD, 7)], oval_ghosts(ORANGE))),
     p!(Anamorphic, "Neon Night", vec![core(8.0, 1.0, WHITE), glow(50.0, 0.35, MAGENTA), streak(950.0, 2.5, 0.9, MAGENTA), streak(950.0, 2.0, 0.5, BLUE), ghost(0.7, 12.0, 0.12, BLUE), soft_ghost(1.5, 50.0, 0.06, MAGENTA)]),
@@ -389,28 +389,28 @@ pub static PRESETS: &[FlarePreset] = &[
     p!(Anamorphic, "Electric Blue", with(vec![core(12.0, 1.1, WHITE), glow(90.0, 0.5, DEEP_BLUE), streak(1200.0, 4.0, 1.0, BLUE), streak(1200.0, 20.0, 0.12, DEEP_BLUE), halo(110.0, 6.0, 0.1, BLUE, 0.4)], oval_ghosts(DEEP_BLUE))),
     // Spherical
     p!(Spherical, "Prime Classic", with(vec![core(12.0, 1.0, WARM), glow(90.0, 0.35, WARM), halo(140.0, 8.0, 0.14, WHITE, 0.6), star(6, 120.0, 1.2, 0.25, WARM, 15.0)], chain(6, 0.3, 1.9, 18.0, 0.12, [0.6, 0.85, 1.0], [1.0, 0.75, 0.5]))),
-    p!(Spherical, "Hexagons", with(vec![core(10.0, 1.0, WHITE), glow(70.0, 0.3, COOL)], vec![hex(0.35, 14.0, 0.14, CYAN), hex(0.7, 26.0, 0.1, GREEN), hex(1.15, 40.0, 0.08, BLUE), hex(1.5, 18.0, 0.12, VIOLET), hex(1.9, 60.0, 0.06, CYAN)])),
-    p!(Spherical, "Chroma Ring", vec![core(9.0, 1.0, WHITE), glow(60.0, 0.3, WHITE), halo(180.0, 10.0, 0.25, WHITE, 1.0), ghost(1.4, 12.0, 0.1, VIOLET)]),
-    p!(Spherical, "Telephoto", with(vec![core(14.0, 1.0, WHITE), glow(110.0, 0.45, BLUE)], vec![soft_ghost(0.5, 70.0, 0.06, BLUE), soft_ghost(1.2, 110.0, 0.05, DEEP_BLUE), ghost(1.6, 20.0, 0.1, CYAN)])),
-    p!(Spherical, "Green Laser", vec![core(6.0, 1.2, [0.7, 1.0, 0.7]), glow(40.0, 0.4, GREEN), star(4, 200.0, 1.0, 0.4, GREEN, 0.0), ghost(0.6, 8.0, 0.18, GREEN), ghost(1.1, 14.0, 0.12, GREEN), ghost(1.7, 5.0, 0.2, GREEN)]),
+    p!(Spherical, "Six Blades", with(vec![core(10.0, 1.0, WHITE), glow(70.0, 0.3, COOL)], vec![hex(0.35, 14.0, 0.14, CYAN), hex(0.7, 26.0, 0.1, GREEN), hex(1.15, 40.0, 0.08, BLUE), hex(1.5, 18.0, 0.12, VIOLET), hex(1.9, 60.0, 0.06, CYAN)])),
+    p!(Spherical, "Prism Halo", vec![core(9.0, 1.0, WHITE), glow(60.0, 0.3, WHITE), halo(180.0, 10.0, 0.25, WHITE, 1.0), ghost(1.4, 12.0, 0.1, VIOLET)]),
+    p!(Spherical, "Long Glass", with(vec![core(14.0, 1.0, WHITE), glow(110.0, 0.45, BLUE)], vec![soft_ghost(0.5, 70.0, 0.06, BLUE), soft_ghost(1.2, 110.0, 0.05, DEEP_BLUE), ghost(1.6, 20.0, 0.1, CYAN)])),
+    p!(Spherical, "Emerald Point", vec![core(6.0, 1.2, [0.7, 1.0, 0.7]), glow(40.0, 0.4, GREEN), star(4, 200.0, 1.0, 0.4, GREEN, 0.0), ghost(0.6, 8.0, 0.18, GREEN), ghost(1.1, 14.0, 0.12, GREEN), ghost(1.7, 5.0, 0.2, GREEN)]),
     p!(Spherical, "Warm Desert", with(vec![core(14.0, 1.0, WARM), glow(130.0, 0.4, GOLD), rays(40, 160.0, 0.12, GOLD, 3)], chain(5, 0.4, 1.8, 22.0, 0.08, GOLD, ORANGE))),
-    p!(Spherical, "Space Lens", with(vec![core(10.0, 1.0, WHITE), glow(80.0, 0.35, BLUE), halo(90.0, 5.0, 0.12, BLUE, 0.5)], vec![hex(0.8, 50.0, 0.06, BLUE), ring_ghost(1.3, 80.0, 0.08, WHITE), ghost(1.7, 10.0, 0.15, CYAN)])),
-    p!(Spherical, "Red Laser", vec![core(6.0, 1.2, [1.0, 0.7, 0.6]), glow(45.0, 0.45, RED), star(4, 220.0, 1.0, 0.35, RED, 0.0), ghost(0.5, 6.0, 0.2, RED), ghost(1.0, 18.0, 0.1, MAGENTA), ghost(1.6, 9.0, 0.16, ORANGE)]),
+    p!(Spherical, "Orbital", with(vec![core(10.0, 1.0, WHITE), glow(80.0, 0.35, BLUE), halo(90.0, 5.0, 0.12, BLUE, 0.5)], vec![hex(0.8, 50.0, 0.06, BLUE), ring_ghost(1.3, 80.0, 0.08, WHITE), ghost(1.7, 10.0, 0.15, CYAN)])),
+    p!(Spherical, "Ruby Point", vec![core(6.0, 1.2, [1.0, 0.7, 0.6]), glow(45.0, 0.45, RED), star(4, 220.0, 1.0, 0.35, RED, 0.0), ghost(0.5, 6.0, 0.2, RED), ghost(1.0, 18.0, 0.1, MAGENTA), ghost(1.6, 9.0, 0.16, ORANGE)]),
     p!(Spherical, "Halo Wide", vec![core(10.0, 1.0, WHITE), glow(80.0, 0.35, COOL), halo(260.0, 30.0, 0.08, COOL, 0.8), arc(1.0, 300.0, 14.0, 0.07, WHITE, 1.0)]),
-    p!(Spherical, "Diffraction", vec![core(9.0, 1.1, WHITE), glow(60.0, 0.35, BLUE), star(8, 260.0, 1.0, 0.4, WHITE, 22.5), star(8, 120.0, 0.8, 0.2, CYAN, 0.0), ghost(1.3, 16.0, 0.1, BLUE)]),
+    p!(Spherical, "Eight Spoke", vec![core(9.0, 1.1, WHITE), glow(60.0, 0.35, BLUE), star(8, 260.0, 1.0, 0.4, WHITE, 22.5), star(8, 120.0, 0.8, 0.2, CYAN, 0.0), ghost(1.3, 16.0, 0.1, BLUE)]),
     // Sun flares
     p!(SunFlare, "Sun Burst", vec![core(18.0, 1.1, WARM), glow(160.0, 0.55, WARM), star(6, 300.0, 2.0, 0.45, WARM, 0.0), rays(60, 260.0, 0.18, WARM, 11), halo(200.0, 25.0, 0.06, GOLD, 0.6)]),
     p!(SunFlare, "Sun Glint", vec![core(12.0, 1.0, WHITE), glow(90.0, 0.4, COOL), star(4, 260.0, 1.5, 0.5, WHITE, 45.0), star(4, 160.0, 1.0, 0.3, WHITE, 0.0)]),
     p!(SunFlare, "Sun Star", vec![core(14.0, 1.0, WHITE), glow(120.0, 0.45, WARM), star(12, 280.0, 1.4, 0.35, WARM, 0.0), rays(30, 200.0, 0.12, WHITE, 5)]),
-    p!(SunFlare, "Glint Rays", vec![core(8.0, 1.0, WHITE), glow(60.0, 0.3, WHITE), rays(120, 320.0, 0.3, WHITE, 21)]),
+    p!(SunFlare, "Needle Burst", vec![core(8.0, 1.0, WHITE), glow(60.0, 0.3, WHITE), rays(120, 320.0, 0.3, WHITE, 21)]),
     p!(SunFlare, "Afternoon", with(vec![core(20.0, 1.0, WARM), glow(220.0, 0.6, GOLD), rays(40, 280.0, 0.12, GOLD, 9)], vec![soft_ghost(0.6, 90.0, 0.05, ORANGE), arc(1.0, 420.0, 18.0, 0.05, GOLD, 1.0)])),
     p!(SunFlare, "Pink Sun", vec![core(16.0, 1.0, [1.0, 0.85, 0.9]), glow(150.0, 0.5, MAGENTA), star(6, 240.0, 1.8, 0.35, [1.0, 0.7, 0.85], 10.0), rays(50, 220.0, 0.12, [1.0, 0.7, 0.85], 13)]),
-    p!(SunFlare, "White Source", vec![core(10.0, 1.2, WHITE), glow(70.0, 0.5, WHITE)]),
-    p!(SunFlare, "Glow Dot", vec![core(6.0, 1.0, WHITE), glow(30.0, 0.35, WARM)]),
-    p!(SunFlare, "Sun Arc", vec![core(16.0, 1.0, WARM), glow(140.0, 0.5, GOLD), arc(1.2, 380.0, 16.0, 0.12, ORANGE, 0.8)]),
+    p!(SunFlare, "Bare Bulb", vec![core(10.0, 1.2, WHITE), glow(70.0, 0.5, WHITE)]),
+    p!(SunFlare, "Pinprick", vec![core(6.0, 1.0, WHITE), glow(30.0, 0.35, WARM)]),
+    p!(SunFlare, "Amber Arc", vec![core(16.0, 1.0, WARM), glow(140.0, 0.5, GOLD), arc(1.2, 380.0, 16.0, 0.12, ORANGE, 0.8)]),
     p!(SunFlare, "Rainbow Arc", vec![core(14.0, 1.0, WHITE), glow(120.0, 0.45, WARM), arc(1.0, 350.0, 22.0, 0.14, WHITE, 1.0), star(6, 200.0, 1.4, 0.25, WHITE, 30.0)]),
     // Streaks
-    p!(Streak, "White Line", vec![core(5.0, 1.0, WHITE), streak(1000.0, 1.5, 0.9, WHITE)]),
+    p!(Streak, "Silver Thread", vec![core(5.0, 1.0, WHITE), streak(1000.0, 1.5, 0.9, WHITE)]),
     p!(Streak, "Blue Line", vec![core(5.0, 1.0, WHITE), streak(1000.0, 1.5, 0.9, BLUE), streak(1000.0, 8.0, 0.15, BLUE)]),
     p!(Streak, "Gold Thread", vec![core(5.0, 1.0, WARM), streak(900.0, 1.2, 0.9, GOLD)]),
     p!(Streak, "Red Thread", vec![core(5.0, 1.0, [1.0, 0.8, 0.8]), streak(900.0, 1.5, 0.9, RED), streak(300.0, 10.0, 0.2, RED)]),
