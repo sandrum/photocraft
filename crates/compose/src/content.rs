@@ -191,7 +191,7 @@ pub(crate) fn render_fill(f: &Fill, rect: Rect, canvas: Rect, patterns: &pattern
             None => Buffer::transparent(rect),
         },
         // Placed on the canvas (`fill_frame` gives a flare the whole canvas).
-        Fill::LensFlare(flare) => Buffer { rect, px: crate::lens_flare::render(flare, rect, canvas) },
+        Fill::LensFlare(flare) => Buffer { rect, px: crate::lens_flare::render_quantized(flare, rect, canvas, quantum) },
     }
 }
 

@@ -19,6 +19,14 @@ const CUTOFF: f32 = 1.0 / 4096.0;
 
 /// The flare's pixels over `rect`, laid out on `canvas` (straight RGBA, row-major).
 pub fn render(flare: &LensFlare, rect: Rect, canvas: Rect) -> Vec<[f32; 4]> {
+    render_quantized(flare, rect, canvas, None)
+}
+
+/// [`render`] for a document whose depth has `quantum` levels ([`crate::adjustment_quantum`]):
+/// the light is dithered and rounded to those levels, as a gradient fill is. A flare's glows fall
+/// off over thousands of pixels, so undithered they reach the 8-bit image as wide one-level
+/// rings (tinted where the channels round at different radii); the noise breaks them up.
+pub fn render_quantized(flare: &LensFlare, rect: Rect, canvas: Rect, quantum: Option<f32>) -> Vec<[f32; 4]> {
     let (w, h) = (rect.width() as usize, rect.height() as usize);
     let mut px = vec![[0.0f32; 4]; w * h];
     if w == 0 || h == 0 || canvas.is_empty() {
@@ -41,6 +49,13 @@ pub fn render(flare: &LensFlare, rect: Rect, canvas: Rect) -> Vec<[f32; 4]> {
             if texture {
                 prep.texture_light(fx, fy, &mut l);
             }
+            let mut l = burn(l);
+            // Only where the flare adds light: the rest of the layer stays transparent.
+            if let Some(q) = quantum
+                && l.iter().any(|v| *v > 0.0)
+            {
+                dither(&mut l, x, y, q);
+            }
             if let Some(p) = px.get_mut(row * w + col) {
                 *p = to_rgba(l);
             }
@@ -49,9 +64,8 @@ pub fn render(flare: &LensFlare, rect: Rect, canvas: Rect) -> Vec<[f32; 4]> {
     px
 }
 
-/// Light to straight RGBA: hot channels spill into the others (cores burn to white), then
-/// `alpha = max`, `rgb = light / alpha`.
-fn to_rgba(mut l: [f32; 3]) -> [f32; 4] {
+/// Light into `0..=1`: hot channels spill into the others (cores burn to white).
+fn burn(mut l: [f32; 3]) -> [f32; 3] {
     for v in &mut l {
         *v = if v.is_finite() { v.max(0.0) } else { 0.0 };
     }
@@ -62,6 +76,22 @@ fn to_rgba(mut l: [f32; 3]) -> [f32; 4] {
             *v = (*v + spill).min(1.0);
         }
     }
+    l
+}
+
+/// Rounds light to `q` levels with triangular noise of ±1 level, the same in every channel (no
+/// colour speckle). Uniform ±½-level noise, as gradients use, still leaves equal runs where the
+/// light sits near a level for long, and a glow's falloff does for hundreds of pixels; the
+/// triangular one makes the rounding error independent of the light, so no band survives.
+fn dither(l: &mut [f32; 3], x: i32, y: i32, q: f32) {
+    let n = photocraft_color::dither_noise(x, y) + photocraft_color::dither_noise(x.wrapping_add(7919), y.wrapping_add(104_729)) - 1.0;
+    for v in l.iter_mut() {
+        *v = ((*v * q + n + 0.5).floor() / q).clamp(0.0, 1.0);
+    }
+}
+
+/// Burnt light to straight RGBA: `alpha = max`, `rgb = light / alpha`.
+fn to_rgba(l: [f32; 3]) -> [f32; 4] {
     let a = l[0].max(l[1]).max(l[2]).min(1.0);
     if a < CUTOFF {
         return [0.0; 4];
@@ -712,6 +742,42 @@ mod tests {
                 assert_eq!(part[(y - 32) * 64 + (x - 64)], at(&whole, 160, x, y));
             }
         }
+    }
+
+    /// One row of a large soft glow at 8 bits: the light each pixel adds (`alpha · rgb`).
+    fn glow_row(quantum: Option<f32>) -> Vec<f32> {
+        let mut f =
+            lens_flare::LensFlare::new(FlareCategory::SunFlare, "x", vec![FlareElement::Glow { radius: 250.0, intensity: 0.4, color: [1.0; 3], falloff: 1.0 }]);
+        f.source = (0.0, 0.5);
+        let c = Rect::new(0, 0, 4000, 2000);
+        let row = Rect::new(0, 1000, 4000, 1001);
+        render_quantized(&f, row, c, quantum).iter().map(|p| p[0] * p[3]).collect()
+    }
+
+    /// The longest run of equal values in `v`: the width of a band.
+    fn widest_band(v: &[f32]) -> usize {
+        v.chunk_by(|a, b| a == b).map(<[f32]>::len).max().unwrap_or(0)
+    }
+
+    #[test]
+    fn an_8_bit_glow_is_dithered_not_banded() {
+        let smooth = glow_row(None);
+        let undithered: Vec<f32> = smooth.iter().map(|v| (v * 255.0).round() / 255.0).collect();
+        let dithered = glow_row(Some(255.0));
+        // Rounded as is, the falloff reaches 8 bits as one-level bands tens of pixels wide.
+        assert!(widest_band(&undithered[400..]) > 40, "{}", widest_band(&undithered[400..]));
+        // Dithered, every value is on an 8-bit level, the bands break up, and the light is kept.
+        assert!(dithered.iter().all(|v| ((v * 255.0).round() - v * 255.0).abs() < 1e-3));
+        // Equal neighbours still happen by chance in noise, but no run is near a band's width.
+        assert!(widest_band(&dithered[400..2000]) < 24, "{}", widest_band(&dithered[400..2000]));
+        for (a, b) in smooth.chunks(200).zip(dithered.chunks(200)) {
+            let mean = |s: &[f32]| s.iter().sum::<f32>() / s.len() as f32;
+            assert!((mean(a) - mean(b)).abs() < 0.6 / 255.0, "{} vs {}", mean(a), mean(b));
+        }
+        // No noise where the flare adds nothing.
+        let f =
+            lens_flare::LensFlare::new(FlareCategory::SunFlare, "x", vec![FlareElement::Glow { radius: 2.0, intensity: 1.0, color: [1.0; 3], falloff: 2.0 }]);
+        assert!(render_quantized(&f, Rect::new(150, 0, 160, 10), canvas(), Some(255.0)).iter().all(|p| *p == [0.0; 4]));
     }
 
     #[test]
