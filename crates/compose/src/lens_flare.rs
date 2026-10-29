@@ -121,12 +121,14 @@ enum Shape {
         r: f32,
         gauss: bool,
     },
-    /// Local frame `(cos, sin)`; `len` along, `th` across.
+    /// Local frame `(cos, sin)`; `len` along; across, a crisp core `th` wide in a soft skirt
+    /// `halo` wide.
     Streak {
         cos: f32,
         sin: f32,
         len: f32,
         th: f32,
+        halo: f32,
     },
     Star {
         rot: f32,
@@ -225,6 +227,7 @@ impl Prepared {
         let (cw, ch) = (canvas.width() as f32, canvas.height() as f32);
         let diag = cw.hypot(ch).max(1.0);
         let u = diag / 1000.0 * f.scale;
+        let ut = u * (DETAIL_REF / diag).powf(DETAIL_SHRINK).min(1.0);
         let (sx, sy) = (canvas.x0 as f32 + f.source.0 * cw, canvas.y0 as f32 + f.source.1 * ch);
         let (mx, my) = (canvas.x0 as f32 + cw / 2.0, canvas.y0 as f32 + ch / 2.0);
         let rot = f.rotation.to_radians();
@@ -262,8 +265,9 @@ impl Prepared {
             let pos = |v: f32| finite(v, 0.0).max(0.0);
             let el = match *e {
                 FlareElement::Glow { radius, falloff, .. } => {
-                    let r = (pos(radius) * u).max(0.3);
                     let gauss = falloff >= 1.5;
+                    // A Gaussian glow is a hot core: a detail, so it stays a point of light.
+                    let r = (pos(radius) * if gauss { ut } else { u }).max(0.3);
                     let reach = r * if gauss { 3.0 } else { 8.5 };
                     Elem { cx: sx, cy: sy, col, shape: Shape::Glow { r, gauss }, bbox: BBox::around(sx, sy, reach * aspect.max(1.0), reach) }
                 }
@@ -271,15 +275,17 @@ impl Prepared {
                     let a = rot + finite(angle, 0.0).to_radians();
                     let (s, c) = a.sin_cos();
                     let len = (pos(length) * u * aspect).max(1.0);
-                    let th = (pos(thickness) * u).max(0.35);
-                    let across = th * 6.0;
+                    let th = (pos(thickness) * ut).max(0.35);
+                    let halo = 3.0 * (pos(thickness) * u).max(0.35);
+                    // Far enough for the skirt to fade out (0.25·e⁻⁹), not end in a visible edge.
+                    let across = (halo * 9.0).max(th * 3.0);
                     let bbox = BBox::around(sx, sy, (len * c).abs() + (across * s).abs(), (len * s).abs() + (across * c).abs());
-                    Elem { cx: sx, cy: sy, col, shape: Shape::Streak { cos: c, sin: s, len, th }, bbox }
+                    Elem { cx: sx, cy: sy, col, shape: Shape::Streak { cos: c, sin: s, len, th, halo }, bbox }
                 }
                 FlareElement::Star { rays, length, thickness, angle, .. } => {
                     let n = rays.clamp(1, photocraft_doc::lens_flare::range::MAX_RAYS) as f32;
                     let len = (pos(length) * u).max(1.0);
-                    let th = (pos(thickness) * u).max(0.35);
+                    let th = (pos(thickness) * ut).max(0.35);
                     let shape = Shape::Star { rot: rot + finite(angle, 0.0).to_radians(), n, len, th };
                     Elem { cx: sx, cy: sy, col, shape, bbox: BBox::around(sx, sy, len, len) }
                 }
@@ -418,14 +424,15 @@ impl Elem {
                 let v = if gauss { (-d * d).exp() } else { (-d).exp() };
                 add(l, self.col, v);
             }
-            Shape::Streak { cos, sin, len, th } => {
+            Shape::Streak { cos, sin, len, th, halo } => {
                 let along = (dx * cos + dy * sin).abs();
                 if along >= len {
                     return;
                 }
-                let across = (-dx * sin + dy * cos).abs() / th;
+                let perp = (-dx * sin + dy * cos).abs();
+                let core = perp / th;
                 let k = along / len;
-                let v = ((-across * across).exp() * 0.75 + (-across / 3.0).exp() * 0.25) * (-2.2 * k).exp() * (1.0 - k);
+                let v = ((-core * core).exp() * 0.75 + (-perp / halo).exp() * 0.25) * (-2.2 * k).exp() * (1.0 - k);
                 add(l, self.col, v);
             }
             Shape::Star { rot, n, len, th } => {
@@ -537,6 +544,17 @@ impl Elem {
 const WASH_APEX: f32 = 1.0;
 /// Reaches after which a wash's light is below [`CUTOFF`].
 const WASH_REACH: f32 = 8.5;
+
+/// The canvas diagonal (px) up to which thin details (streak and star cores, hot cores) scale
+/// with the flare like everything else: about a preset thumbnail's. Past it they grow more
+/// slowly than the canvas ([`DETAIL_SHRINK`]), so a large image keeps the crisp lines and points
+/// of the thumbnail instead of a uniformly enlarged, soft copy of it, while glows, halos, ghosts,
+/// washes, rays and a streak's soft skirt keep the flare's proportions.
+const DETAIL_REF: f32 = 300.0;
+/// How much slower than the canvas details grow past [`DETAIL_REF`]: they scale with
+/// `diag^(1 − DETAIL_SHRINK)`. At ½ the cores of a 7000 px image read as specks at a fit-to-window
+/// zoom; 0.3 keeps them hot points with crisp edges.
+const DETAIL_SHRINK: f32 = 0.3;
 
 fn add(l: &mut [f32; 3], col: [f32; 3], v: f32) {
     if v > CUTOFF {
@@ -778,6 +796,45 @@ mod tests {
         let f =
             lens_flare::LensFlare::new(FlareCategory::SunFlare, "x", vec![FlareElement::Glow { radius: 2.0, intensity: 1.0, color: [1.0; 3], falloff: 2.0 }]);
         assert!(render_quantized(&f, Rect::new(150, 0, 160, 10), canvas(), Some(255.0)).iter().all(|p| *p == [0.0; 4]));
+    }
+
+    /// A lone horizontal streak's light down the column through its source, from the centre out.
+    fn streak_column(canvas: Rect) -> Vec<f32> {
+        let mut f = lens_flare::LensFlare::new(
+            FlareCategory::Streak,
+            "x",
+            vec![FlareElement::Streak { length: 900.0, thickness: 3.0, intensity: 0.9, color: [1.0; 3], angle: 0.0 }],
+        );
+        f.source = (0.5, 0.5);
+        let (cx, cy) = ((canvas.x0 + canvas.x1) / 2, (canvas.y0 + canvas.y1) / 2);
+        render(&f, Rect::new(cx, cy, cx + 1, canvas.y1), canvas).iter().map(|p| p[0] * p[3]).collect()
+    }
+
+    /// How far from the centre `v` first falls below `frac` of its peak, as a fraction of `of`.
+    fn reach(v: &[f32], frac: f32, of: i32) -> f32 {
+        let peak = v.first().copied().unwrap_or(0.0);
+        v.iter().position(|x| *x < peak * frac).unwrap_or(v.len()) as f32 / of as f32
+    }
+
+    #[test]
+    fn thin_details_stay_fine_on_large_canvases_and_skirts_fade_out() {
+        let (small, big) = (Rect::new(0, 0, 256, 144), Rect::new(0, 0, 7200, 4050));
+        let (s, b) = (streak_column(small), streak_column(big));
+        // The core (half its peak) is much finer on the large canvas, relative to its height ...
+        assert!(reach(&b, 0.5, 4050) < reach(&s, 0.5, 144) / 3.0, "{} vs {}", reach(&b, 0.5, 4050), reach(&s, 0.5, 144));
+        // ... while the soft skirt keeps the flare's proportions.
+        let (bs, ss) = (reach(&b, 0.05, 4050), reach(&s, 0.05, 144));
+        assert!((bs - ss).abs() < ss * 0.35, "skirt {bs} vs {ss}");
+        // Past the core the skirt fades to nothing instead of ending at the element's box: it
+        // only falls, and never by more than a hundredth of the peak from one pixel to the next.
+        let skirt = b.iter().position(|v| *v < b[0] * 0.2).unwrap_or(b.len());
+        assert!(b[skirt..].windows(2).all(|w| w[1] <= w[0] + 1e-6 && w[0] - w[1] < b[0] * 0.01), "a step in the skirt");
+        assert!(b.last().is_some_and(|v| *v < 1e-4));
+        // Thumbnails are unchanged: up to the reference diagonal a detail scales with the flare.
+        let ref_side = (DETAIL_REF / 2f32.sqrt()) as i32;
+        let t = streak_column(Rect::new(0, 0, ref_side, ref_side));
+        let t2 = streak_column(Rect::new(0, 0, ref_side / 2, ref_side / 2));
+        assert!((reach(&t, 0.5, ref_side) - reach(&t2, 0.5, ref_side / 2)).abs() < 0.02);
     }
 
     #[test]
