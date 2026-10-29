@@ -1152,7 +1152,25 @@ fn parse_pointer_event(i: usize, e: &Value) -> std::result::Result<PointerSample
 
 /// Whether a modal tool, picker or context menu took the event instead of the canvas.
 fn pointer_event_intercepted(app: &mut PhotocraftApp, ctx: &egui::Context, g: &PointerGesture, s: &PointerSample) -> bool {
-    pointer_eyedropper_took(app, ctx, g, s) || color_range_took(app, g, s) || (g.secondary && secondary_menu_took(app, ctx, g, s))
+    pointer_eyedropper_took(app, ctx, g, s) || color_range_took(app, g, s) || lens_flare_took(app, g, s) || (g.secondary && secondary_menu_took(app, ctx, g, s))
+}
+
+/// The Lens Flare dialog places its light where the primary button presses or drags (document
+/// coordinates), and owns every pointer event meanwhile: no tool runs under it.
+fn lens_flare_took(app: &mut PhotocraftApp, g: &PointerGesture, s: &PointerSample) -> bool {
+    if !crate::lens_flare_ui::placing(app) {
+        return false;
+    }
+    let down = matches!(s.ev, ToolEvent::Down { .. });
+    let up = matches!(s.ev, ToolEvent::Up { .. });
+    let held = app.ui.dialogs.last().and_then(|d| d.fields.get("__pointerDown")).and_then(Value::as_bool).unwrap_or(false);
+    if let Some(d) = app.ui.dialogs.last_mut() {
+        d.fields.insert("__pointerDown".into(), json!(!up && (down || held)));
+    }
+    if !up && (down || held) && !g.space && !g.secondary && !g.middle {
+        crate::lens_flare_ui::place_at(app, [s.x, s.y]);
+    }
+    true
 }
 
 fn pointer_eyedropper_took(app: &mut PhotocraftApp, ctx: &egui::Context, g: &PointerGesture, s: &PointerSample) -> bool {

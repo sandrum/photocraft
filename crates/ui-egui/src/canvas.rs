@@ -659,6 +659,8 @@ fn handle_dialog_canvas_input(app: &mut PhotocraftApp, input: DialogCanvasInput<
         input.primary && app.ui.dialogs.last().is_some_and(|d| crate::select_mask_view::owns(&d.fields) && crate::select_mask_view::brush_on(&d.fields));
     // Field Blur's pins are placed and dragged on the image (`blur_pins`).
     let pinning = input.primary && app.ui.dialogs.last().is_some_and(|d| crate::blur_pins::owns(&d.fields));
+    // The Lens Flare dialog's light source is placed by a click or drag on the image.
+    let flare_placing = input.primary && crate::lens_flare_ui::placing(app);
     // Layer Style on a Drop or Inner Shadow page: a drag on the image moves the shadow (#5701).
     let shadow_drag =
         !picking && app.ui.dialogs.last().is_some_and(|d| d.kind == crate::state::DialogKind::LayerStyle && crate::layer_style::drags_shadow(&d.fields));
@@ -676,7 +678,14 @@ fn handle_dialog_canvas_input(app: &mut PhotocraftApp, input: DialogCanvasInput<
         .flatten()
         .map(|m| crate::workspace_ui::sticky_mods(app, m))
         .filter(|m| m.command);
-    let dialog_hand = app.ui.tool == Tool::Hand && !picking && !range_picking && !refine_brushing && !pinning && !shadow_drag && curve_point_press.is_none();
+    let dialog_hand = app.ui.tool == Tool::Hand
+        && !picking
+        && !range_picking
+        && !refine_brushing
+        && !pinning
+        && !flare_placing
+        && !shadow_drag
+        && curve_point_press.is_none();
     // ⌘Space / ⌥Space zoom under the dialog as they do without one, before Space pans (#6460).
     // With the Hand tool, ⌘ alone is Zoom In (#6434); under Curves that press is the dialog's
     // point (#7325), not a zoom.
@@ -735,6 +744,12 @@ fn handle_dialog_canvas_input(app: &mut PhotocraftApp, input: DialogCanvasInput<
     {
         let press = crate::dialogs::free_press(input.ctx, input.rect);
         crate::blur_pins::canvas(app, input.ctx, input.xf, p, press);
+    } else if flare_placing && !input.middle && crate::dialogs::free_pointer_over(input.ctx, input.rect).is_some() {
+        // Outside the image too: a light just off the frame still throws its ghosts across it.
+        input.ctx.set_cursor_icon(egui::CursorIcon::Crosshair);
+        if let Some(p) = crate::dialogs::free_press(input.ctx, input.rect) {
+            crate::lens_flare_ui::place_at(app, input.xf.to_doc(p));
+        }
     } else if refine_brushing
         && !input.middle
         && let Some(p) = crate::dialogs::free_pointer_over(input.ctx, input.rect)

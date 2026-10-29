@@ -7,6 +7,11 @@
 //! `layer.fill.lensFlare.set` for an existing one), so it is one History step; Cancel changes
 //! nothing. The layer stays a flare: reopen it to change anything until the image is final.
 //! The fields are the command's params, so `ui.dialog.set` / `ui.dialog.confirm` drive it.
+//!
+//! The light can also be placed on the image itself: while the dialog is on top a click or drag
+//! on the canvas moves it (`canvas.rs`), and the pad shows the document. The Filters tab grades
+//! the image with a look (the commands' `look` param: adjustment layers in a group above the
+//! flare), committed with the flare in the same History step.
 
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -15,18 +20,42 @@ use egui::{Color32, Rect, Sense, Stroke, Vec2, pos2, vec2};
 use photocraft_doc::lens_flare::{self, FlareCategory, TextureKind, range};
 use photocraft_doc::{DocId, Document, Fill, LayerContent};
 use photocraft_engine::lens_flare_cmds as cmds;
+use photocraft_engine::lens_flare_cmds::looks;
 use serde_json::{Map, Value, json};
 
 use crate::PhotocraftApp;
 use crate::theme::Tokens;
 
+mod canvas;
+pub(crate) use canvas::{draw_handle, place_at, placing};
+
 const MARK: &str = "__lensFlare";
 /// The fields that are command params (besides the target in `__params`).
-const KEYS: [&str; 15] =
-    ["preset", "x", "y", "scale", "brightness", "aspect", "source", "artifacts", "rotation", "hue", "tint", "texture", "textureOpacity", "flipX", "flipY"];
+const KEYS: [&str; 16] = [
+    "preset",
+    "x",
+    "y",
+    "scale",
+    "brightness",
+    "aspect",
+    "source",
+    "artifacts",
+    "rotation",
+    "hue",
+    "tint",
+    "texture",
+    "textureOpacity",
+    "flipX",
+    "flipY",
+    "look",
+];
 /// The dialog's width: five preset thumbnails across.
 pub(crate) const WIDTH: f32 = 720.0;
 const THUMB: Vec2 = vec2(128.0, 72.0);
+/// A look's thumbnail in the Filters tab: six across.
+const LOOK_THUMB: Vec2 = vec2(108.0, 61.0);
+/// The tab that holds the looks (the others are preset categories).
+const FILTERS: &str = "filters";
 
 pub(crate) struct Preview {
     document: DocId,
@@ -63,7 +92,9 @@ pub(crate) fn open(app: &mut PhotocraftApp) -> Option<u64> {
     let st = app.session.active()?;
     let layer = st.active_layer?;
     let LayerContent::Fill(Fill::LensFlare(flare)) = &st.doc.layer(layer)?.content else { return None };
-    let f = fields(cmds::SET, json!({"layer": layer.0, "document": st.doc.id.0}), cmds::params_of(flare));
+    let mut values = cmds::params_of(flare);
+    values["look"] = json!(cmds::look_of(&st.doc, layer));
+    let f = fields(cmds::SET, json!({"layer": layer.0, "document": st.doc.id.0}), values);
     Some(app.ui.open_dialog(crate::state::DialogKind::Command, f))
 }
 
@@ -75,7 +106,9 @@ pub(crate) fn open_new(app: &mut PhotocraftApp) -> Result<u64, String> {
     }
     let st = app.session.active().ok_or("no document open")?;
     let flare = lens_flare::preset(cmds::DEFAULT_PRESET).ok_or("no lens flare presets")?.flare();
-    let f = fields(cmds::CREATE, json!({"document": st.doc.id.0}), cmds::params_of(&flare));
+    let mut values = cmds::params_of(&flare);
+    values["look"] = json!(looks::NONE);
+    let f = fields(cmds::CREATE, json!({"document": st.doc.id.0}), values);
     Ok(app.ui.open_dialog(crate::state::DialogKind::Command, f))
 }
 
@@ -203,9 +236,53 @@ fn thumbnail(ctx: &egui::Context, preset: &lens_flare::FlarePreset) -> egui::Tex
     tex
 }
 
-/// The preset tabs and the thumbnail grid of the selected tab.
-fn library(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
+/// A selectable thumbnail cell with its caption; returns its response.
+fn cell(ui: &mut egui::Ui, size: Vec2, label: &str, selected: bool, paint: impl FnOnce(&egui::Painter, Rect)) -> egui::Response {
     let t = Tokens::get(ui.ctx());
+    let (rect, resp) = ui.allocate_exact_size(size + vec2(0.0, 18.0), Sense::click());
+    let img = Rect::from_min_size(rect.min, size);
+    if ui.is_rect_visible(rect) {
+        paint(ui.painter(), img);
+        let border = if selected {
+            Stroke::new(2.0, t.accent)
+        } else if resp.hovered() {
+            Stroke::new(1.0, t.text_dim)
+        } else {
+            Stroke::new(1.0, t.field_border)
+        };
+        ui.painter().rect_stroke(img, t.radius_sm, border, egui::StrokeKind::Inside);
+        let color = if selected { t.accent } else { t.text_dim };
+        ui.painter().text(pos2(img.center().x, img.bottom() + 9.0), egui::Align2::CENTER_CENTER, label, egui::FontId::proportional(11.0), color);
+    }
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, label));
+    resp
+}
+
+/// The Filters tab: the image graded by each look; picking one replaces the previous look.
+fn look_grid(app: &PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Value>) {
+    let current = f.get("look").and_then(Value::as_str).unwrap_or(looks::NONE).to_string();
+    let thumbs = canvas::thumbs(app, ui.ctx(), f);
+    let indexed: Vec<_> = looks::LOOKS.iter().enumerate().collect();
+    for row in indexed.chunks(6) {
+        ui.horizontal(|ui| {
+            for (i, look) in row {
+                let tex = thumbs.as_ref().and_then(|t| t.looks.get(*i).cloned());
+                let resp = cell(ui, LOOK_THUMB, tl!(look.name), current == look.id, |p, img| {
+                    p.rect_filled(img, 0.0, Color32::from_rgb(14, 16, 24));
+                    if let Some(tex) = tex {
+                        p.image(tex.id(), img, canvas::cover_uv(tex.size(), img.aspect_ratio()), Color32::WHITE);
+                    }
+                });
+                if resp.clicked() {
+                    f.insert("look".into(), json!(look.id));
+                }
+            }
+        });
+    }
+}
+
+/// The preset tabs (and Filters) and the thumbnail grid of the selected tab.
+fn library(app: &PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Value>) {
     let tab = f.get("__tab").and_then(Value::as_str).unwrap_or("anamorphic").to_string();
     let current = f.get("preset").and_then(Value::as_str).unwrap_or_default().to_string();
     ui.horizontal(|ui| {
@@ -214,31 +291,25 @@ fn library(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
                 f.insert("__tab".into(), json!(c.id()));
             }
         }
+        if crate::widgets::pill_tab(ui, tl!("Filters"), tab == FILTERS).clicked() {
+            f.insert("__tab".into(), json!(FILTERS));
+        }
     });
+    if tab == FILTERS {
+        ui.add_space(4.0);
+        look_grid(app, ui, f);
+        return;
+    }
     let category = FlareCategory::ALL.into_iter().find(|c| c.id() == tab).unwrap_or_default();
     let presets: Vec<_> = lens_flare::presets(category).collect();
     ui.add_space(4.0);
     for row in presets.chunks(5) {
         ui.horizontal(|ui| {
             for p in row {
-                let selected = p.name == current;
-                let (rect, resp) = ui.allocate_exact_size(THUMB + vec2(0.0, 18.0), Sense::click());
-                let img = Rect::from_min_size(rect.min, THUMB);
-                if ui.is_rect_visible(rect) {
-                    let tex = thumbnail(ui.ctx(), p);
-                    ui.painter().image(tex.id(), img, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
-                    let border = if selected {
-                        Stroke::new(2.0, t.accent)
-                    } else if resp.hovered() {
-                        Stroke::new(1.0, t.text_dim)
-                    } else {
-                        Stroke::new(1.0, t.field_border)
-                    };
-                    ui.painter().rect_stroke(img, t.radius_sm, border, egui::StrokeKind::Inside);
-                    let color = if selected { t.accent } else { t.text_dim };
-                    ui.painter().text(pos2(img.center().x, img.bottom() + 9.0), egui::Align2::CENTER_CENTER, tl!(p.name), egui::FontId::proportional(11.0), color);
-                }
-                resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, p.name));
+                let tex = thumbnail(ui.ctx(), p);
+                let resp = cell(ui, THUMB, tl!(p.name), p.name == current, |painter, img| {
+                    painter.image(tex.id(), img, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+                });
                 if resp.clicked() {
                     f.insert("preset".into(), json!(p.name));
                 }
@@ -263,6 +334,10 @@ fn position_pad(app: &PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Valu
     if ui.is_rect_visible(rect) {
         let painter = ui.painter_at(rect);
         painter.rect_filled(rect, t.radius_sm, Color32::from_rgb(14, 16, 24));
+        // The document itself (without the flare being edited), so the light goes where it shows.
+        if let Some(thumbs) = canvas::thumbs(app, ui.ctx(), f) {
+            painter.image(thumbs.pad.id(), rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+        }
         let (x, y) = (num(f, "x", 0.3), num(f, "y", 0.3));
         let src = pos2(rect.left() + x * rect.width(), rect.top() + y * rect.height());
         // The flare's axis through the frame centre, where its ghosts fall.
@@ -296,25 +371,18 @@ fn control(ui: &mut egui::Ui, f: &mut Map<String, Value>, (label, k, r, default,
 pub(crate) fn body(app: &PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Value>) {
     ui.spacing_mut().item_spacing.y = 6.0;
     ui.set_width(WIDTH);
-    library(ui, f);
+    library(app, ui, f);
     crate::widgets::hairline(ui);
     ui.horizontal_top(|ui| {
         ui.vertical(|ui| {
             ui.set_width(190.0);
             crate::widgets::section_label(ui, tl!("Light Source"));
             position_pad(app, ui, f);
-            ui.label(egui::RichText::new(tl!("Click or drag to place the light.")).small().color(Tokens::get(ui.ctx()).text_faint));
+            ui.label(egui::RichText::new(tl!("Click or drag here or on the image.")).small().color(Tokens::get(ui.ctx()).text_faint));
             if crate::widgets::secondary_button(ui, tl!("Reset"), 80.0).clicked() {
-                for (k, v) in [
-                    ("scale", 1.0),
-                    ("brightness", 1.0),
-                    ("aspect", 1.0),
-                    ("source", 1.0),
-                    ("artifacts", 1.0),
-                    ("rotation", 0.0),
-                    ("hue", 0.0),
-                    ("tint", 0.0),
-                ] {
+                for (k, v) in
+                    [("scale", 1.0), ("brightness", 1.0), ("aspect", 1.0), ("source", 1.0), ("artifacts", 1.0), ("rotation", 0.0), ("hue", 0.0), ("tint", 0.0)]
+                {
                     f.insert(k.into(), json!(v));
                 }
             }
