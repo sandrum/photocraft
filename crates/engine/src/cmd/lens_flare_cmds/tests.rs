@@ -144,3 +144,20 @@ fn psd_export_writes_the_flare_as_pixels() {
     let worst = a.iter().zip(&b).flat_map(|(p, q)| p.iter().zip(q).map(|(x, y)| (x - y).abs())).fold(0.0f32, f32::max);
     assert!(worst < 0.02, "PSD looks different: {worst}");
 }
+
+#[test]
+fn edge_wash_and_new_textures_light_the_image_at_every_depth() {
+    for depth in [8, 16, 32] {
+        let mut s = session(depth);
+        s.execute("edit.fill", json!({"color": "#202020"})).ok();
+        let far = pixel(&s, 40, 22);
+        let id = s.execute(CREATE, json!({"preset": "Morning Spill", "x": 0.05, "y": 0.5})).unwrap()["layer"].as_u64().unwrap();
+        // The wash carries light from the left edge well into the frame.
+        let lit = pixel(&s, 40, 22);
+        assert!(lit[0] > far[0] + 0.05, "{depth}-bit: {far:?} → {lit:?}");
+        s.execute(SET, json!({"layer": id, "texture": "bokehBubbles", "textureOpacity": 1.0})).unwrap();
+        assert_eq!(flare_of(&s, id).texture.kind, TextureKind::BokehBubbles);
+        let all = Rect::new(0, 0, 80, 45);
+        assert!(photocraft_compose::render(&s.active().unwrap().doc, all).px.iter().flatten().all(|v| v.is_finite()), "{depth}-bit");
+    }
+}
