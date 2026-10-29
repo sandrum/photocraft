@@ -38,6 +38,28 @@ Window Light, Prism Leak, Low Sun Spill, Blue Hour Leak, Ember Leak, Silver Spil
 Hazy Noon) and large chromatic rims (Rainbow Rim, Ring of Day). A new preset keeps the user's
 controls and position. Preset names are original; don't reuse names from other flare tools.
 
+## Placing the light
+
+While the dialog is open, click or drag **on the image** to move the light source, as on the
+dialog's position pad (which shows a thumbnail of the document, without the flare being edited).
+The light follows the pointer at any zoom, pan or rotation (screen → document through the canvas
+`ViewXform`), and may sit outside the frame (−1…2 of the canvas size). A crosshair marks the
+source on the canvas. The dialog owns the canvas meanwhile, like Field Blur's pins
+(`canvas::handle_dialog_canvas_input`): no tool paints or selects; Space and the middle button
+still pan. Agents do the same with `ui.pointer` events (document coordinates) while the dialog
+is on top. The pad and Filters thumbnails are rendered once per document revision.
+
+## Looks (Filters tab)
+
+The **Filters** tab grades the whole image with a look, previewed on thumbnails of the document:
+None, Golden Hour, Blue Hour, Teal & Amber, Silver Bleach, Faded Print, Moonlight, Old Sepia,
+Punch, Vivid, Noir and Cross Lab. A look is ordinary adjustment layers (Curves, Hue/Saturation,
+Color Balance, Photo Filter, Vibrance, Brightness/Contrast, Black & White) in a collapsed
+pass-through group named "<Look> Look", directly above the flare and the layers clipped to it, so
+it stays editable and its opacity sets its strength. The group carries an XMP tag
+(`urn:photocraft:lens-flare:1`, look id and flare layer id), so picking another look replaces it
+and None removes it instead of stacking. OK commits the flare and its look as one History step.
+
 ## How it composites
 
 The layer renders light as straight RGBA with `alpha = max(light)`, and is created with the
@@ -54,10 +76,11 @@ clipping, stacking several flare layers, and adjustment layers above them as col
 ## Commands
 
 - `layer.newFillLayer.lensFlare` `{preset, x, y, scale, brightness, aspect, source, artifacts,
-  rotation, hue, tint, texture, textureOpacity, flipX, flipY, blend, path}`
+  rotation, hue, tint, texture, textureOpacity, flipX, flipY, blend, look, path}`
 - `layer.fill.lensFlare.set` `{layer, …the same}`: omitted values keep the layer's.
-- `layer.fill.lensFlare.presets` `{category?}`: the library, for agents (also lists the texture
-  ids).
+- `layer.fill.lensFlare.look` `{layer?, document?, look}`: replace the flare's look (`"none"`
+  removes it), one History step → `{layer, look, group}`.
+- `layer.fill.lensFlare.presets` `{category?}`: the library (presets, textures, looks), for agents.
 
 ## Previewing presets
 
