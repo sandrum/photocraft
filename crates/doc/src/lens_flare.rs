@@ -70,10 +70,26 @@ pub enum TextureKind {
     Scratches,
     /// Broad greasy smudges.
     Smudge,
+    /// Heavy, clumpy film grain.
+    CoarseGrain,
+    /// Pixel-fine film grain.
+    FineGrain,
+    /// Curved streaky reflections, as in a bent sheet of glass.
+    GlassArcs,
+    /// Many round soft discs of dust, out of focus.
+    SoftOrbs,
+    /// A diffuse haze of dust and fog on the glass.
+    HazyGlass,
+    /// Fine parallel brushing lines, as on a metal plate.
+    BrushedSteel,
+    /// Dust specks stretched horizontally by an anamorphic lens.
+    StretchedSpecks,
+    /// Large out-of-focus discs with bright rims.
+    BokehBubbles,
 }
 
 impl TextureKind {
-    pub const ALL: [TextureKind; 8] = [
+    pub const ALL: [TextureKind; 16] = [
         TextureKind::None,
         TextureKind::FilmGrain,
         TextureKind::Dust,
@@ -82,18 +98,34 @@ impl TextureKind {
         TextureKind::Raindrops,
         TextureKind::Scratches,
         TextureKind::Smudge,
+        TextureKind::CoarseGrain,
+        TextureKind::FineGrain,
+        TextureKind::GlassArcs,
+        TextureKind::SoftOrbs,
+        TextureKind::HazyGlass,
+        TextureKind::BrushedSteel,
+        TextureKind::StretchedSpecks,
+        TextureKind::BokehBubbles,
     ];
 
     pub fn label(self) -> &'static str {
         match self {
-            TextureKind::None => "No Texture",
+            TextureKind::None => "None",
             TextureKind::FilmGrain => "Film Grain",
             TextureKind::Dust => "Dust",
-            TextureKind::BigSpots => "Big Spots",
+            TextureKind::BigSpots => "Large Blots",
             TextureKind::HexDust => "Hex Dust",
-            TextureKind::Raindrops => "Raindrops",
+            TextureKind::Raindrops => "Water Beads",
             TextureKind::Scratches => "Scratches",
             TextureKind::Smudge => "Smudge",
+            TextureKind::CoarseGrain => "Coarse Grain",
+            TextureKind::FineGrain => "Fine Grain",
+            TextureKind::GlassArcs => "Glass Arcs",
+            TextureKind::SoftOrbs => "Soft Orbs",
+            TextureKind::HazyGlass => "Hazy Glass",
+            TextureKind::BrushedSteel => "Brushed Steel",
+            TextureKind::StretchedSpecks => "Stretched Specks",
+            TextureKind::BokehBubbles => "Bokeh Bubbles",
         }
     }
 
@@ -108,6 +140,14 @@ impl TextureKind {
             TextureKind::Raindrops => "raindrops",
             TextureKind::Scratches => "scratches",
             TextureKind::Smudge => "smudge",
+            TextureKind::CoarseGrain => "coarseGrain",
+            TextureKind::FineGrain => "fineGrain",
+            TextureKind::GlassArcs => "glassArcs",
+            TextureKind::SoftOrbs => "softOrbs",
+            TextureKind::HazyGlass => "hazyGlass",
+            TextureKind::BrushedSteel => "brushedSteel",
+            TextureKind::StretchedSpecks => "stretchedSpecks",
+            TextureKind::BokehBubbles => "bokehBubbles",
         }
     }
 
@@ -151,11 +191,35 @@ pub enum FlareElement {
     /// A ring of `radius` and `width`, centred on the flare axis at `t` (0 = the source). `chroma`
     /// spreads red and blue apart (a rainbow edge), `arc` keeps only the side facing away from
     /// the source (`0` = the whole ring, `1` = a half ring).
-    Ring { t: f32, radius: f32, width: f32, intensity: f32, color: [f32; 3], chroma: f32, #[serde(default)] arc: f32 },
+    Ring {
+        t: f32,
+        radius: f32,
+        width: f32,
+        intensity: f32,
+        color: [f32; 3],
+        chroma: f32,
+        #[serde(default)]
+        arc: f32,
+    },
     /// A ghost image of the iris on the axis at `t` (0 = the source, 1 = the frame centre, 2 = the
     /// mirror point). `sides` 0 = round, else a polygon; `rim` brightens its edge; `softness`
     /// blurs it (`0..=1`).
     Ghost { t: f32, radius: f32, intensity: f32, color: [f32; 3], sides: u32, rim: f32, softness: f32, chroma: f32 },
+    /// Edge light: a broad soft wash that pours in from the frame edge past the source, as when
+    /// the sun sits just outside the frame. It fans out from behind the source towards the frame
+    /// centre in a cone `spread` degrees wide (half-angle), fading over `reach`; `chroma` adds a
+    /// faint rainbow fringe at the edge of the light, and `angle` turns the wash (degrees) away
+    /// from pointing straight at the centre. The flare's rotation turns it too.
+    Wash {
+        reach: f32,
+        spread: f32,
+        intensity: f32,
+        color: [f32; 3],
+        #[serde(default)]
+        chroma: f32,
+        #[serde(default)]
+        angle: f32,
+    },
 }
 
 impl FlareElement {
@@ -163,7 +227,7 @@ impl FlareElement {
     /// artifact along the axis (scaled by Artifacts).
     pub fn at_source(&self) -> bool {
         match self {
-            FlareElement::Glow { .. } | FlareElement::Streak { .. } | FlareElement::Star { .. } | FlareElement::Rays { .. } => true,
+            FlareElement::Glow { .. } | FlareElement::Streak { .. } | FlareElement::Star { .. } | FlareElement::Rays { .. } | FlareElement::Wash { .. } => true,
             FlareElement::Ring { t, .. } => t.abs() < 1e-3,
             FlareElement::Ghost { .. } => false,
         }
@@ -446,6 +510,40 @@ mod tests {
         f.texture.kind = TextureKind::HexDust;
         let back: LensFlare = serde_json::from_value(serde_json::to_value(&f).unwrap()).unwrap();
         assert_eq!(back, f);
+    }
+
+    #[test]
+    fn wash_round_trips_and_older_json_still_loads() {
+        let mut f = preset("forked light").map(|p| p.flare()).unwrap_or_else(|| LensFlare::new(FlareCategory::SunFlare, "x", vec![]));
+        f.elements.push(FlareElement::Wash { reach: 300.0, spread: 40.0, intensity: 0.5, color: [1.0, 0.5, 0.2], chroma: 1.2, angle: -15.0 });
+        let v = serde_json::to_value(&f).unwrap();
+        assert!(v["elements"].as_array().unwrap().iter().any(|e| e["kind"] == "wash" && e["reach"] == 300.0));
+        assert_eq!(serde_json::from_value::<LensFlare>(v).unwrap(), f);
+        // A wash written without the optional fields.
+        let w: FlareElement = serde_json::from_str(r#"{"kind":"wash","reach":200,"spread":30,"intensity":0.4,"color":[1,1,1]}"#).unwrap();
+        assert_eq!(w, FlareElement::Wash { reach: 200.0, spread: 30.0, intensity: 0.4, color: [1.0; 3], chroma: 0.0, angle: 0.0 });
+        assert!(w.at_source());
+        // A flare saved before washes and the newer textures existed.
+        let old = r#"{"category":"spherical","preset":"Prime Classic","source":[0.3,0.3],"scale":1.0,"brightness":1.0,
+            "aspect":1.0,"sourceGain":1.0,"artifacts":1.0,"rotation":0.0,"hue":0.0,"tint":0.0,
+            "texture":{"kind":"hexDust","opacity":0.6},
+            "elements":[{"kind":"glow","radius":10,"intensity":1,"color":[1,1,1],"falloff":2},
+                        {"kind":"ring","t":0,"radius":90,"width":5,"intensity":0.1,"color":[1,1,1],"chroma":0.5},
+                        {"kind":"ghost","t":1.2,"radius":20,"intensity":0.1,"color":[1,1,1],"sides":6,"rim":0.5,"softness":0.2,"chroma":0.3}]}"#;
+        let f: LensFlare = serde_json::from_str(old).unwrap();
+        assert_eq!((f.elements.len(), f.texture.kind), (3, TextureKind::HexDust));
+    }
+
+    #[test]
+    fn texture_ids_are_their_serde_names_and_labels_are_unique() {
+        let mut labels = std::collections::HashSet::new();
+        for t in TextureKind::ALL {
+            assert_eq!(serde_json::to_value(t).unwrap(), t.id(), "{t:?}");
+            assert_eq!(TextureKind::from_id(t.id()), Some(t));
+            assert_eq!(TextureKind::from_id(t.label()), Some(t));
+            assert!(labels.insert(t.label()), "{t:?}");
+        }
+        assert_eq!(TextureKind::ALL.len(), 16);
     }
 
     #[test]

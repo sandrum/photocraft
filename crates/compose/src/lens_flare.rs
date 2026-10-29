@@ -87,13 +87,53 @@ impl BBox {
 }
 
 enum Shape {
-    Glow { r: f32, gauss: bool },
+    Glow {
+        r: f32,
+        gauss: bool,
+    },
     /// Local frame `(cos, sin)`; `len` along, `th` across.
-    Streak { cos: f32, sin: f32, len: f32, th: f32 },
-    Star { rot: f32, n: f32, len: f32, th: f32 },
-    Rays { rot: f32, count: u32, len: f32, th: f32, seed: u32 },
-    Ring { r: f32, w: f32, chroma: f32, arc: f32, dir: (f32, f32) },
-    Ghost { r: f32, sides: u32, rot: f32, rim: f32, soft: f32, chroma: f32 },
+    Streak {
+        cos: f32,
+        sin: f32,
+        len: f32,
+        th: f32,
+    },
+    Star {
+        rot: f32,
+        n: f32,
+        len: f32,
+        th: f32,
+    },
+    Rays {
+        rot: f32,
+        count: u32,
+        len: f32,
+        th: f32,
+        seed: u32,
+    },
+    Ring {
+        r: f32,
+        w: f32,
+        chroma: f32,
+        arc: f32,
+        dir: (f32, f32),
+    },
+    Ghost {
+        r: f32,
+        sides: u32,
+        rot: f32,
+        rim: f32,
+        soft: f32,
+        chroma: f32,
+    },
+    /// Centred on the cone's apex (behind the source); `dir` points into the frame.
+    Wash {
+        dir: (f32, f32),
+        reach: f32,
+        spread: f32,
+        chroma: f32,
+        peak: f32,
+    },
 }
 
 struct Elem {
@@ -177,7 +217,8 @@ impl Prepared {
                 | FlareElement::Star { color, intensity, .. }
                 | FlareElement::Rays { color, intensity, .. }
                 | FlareElement::Ring { color, intensity, .. }
-                | FlareElement::Ghost { color, intensity, .. } => (*color, finite(*intensity, 0.0).clamp(0.0, 4.0)),
+                | FlareElement::Ghost { color, intensity, .. }
+                | FlareElement::Wash { color, intensity, .. } => (*color, finite(*intensity, 0.0).clamp(0.0, 4.0)),
             };
             let color = color.map(|c| finite(c, 0.0).clamp(0.0, 1.0));
             let c = tinted(color, hue, f.tint);
@@ -232,16 +273,35 @@ impl Prepared {
                     let r = (pos(radius) * u).max(0.5);
                     let sides = if sides >= 3 { sides.min(16) } else { 0 };
                     let chroma = finite(chroma, 0.0).clamp(0.0, 2.0);
-                    let shape = Shape::Ghost {
-                        r,
-                        sides,
-                        rot,
-                        rim: finite(rim, 0.0).clamp(0.0, 2.0),
-                        soft: finite(softness, 0.0).clamp(0.02, 1.0),
-                        chroma,
-                    };
+                    let shape = Shape::Ghost { r, sides, rot, rim: finite(rim, 0.0).clamp(0.0, 2.0), soft: finite(softness, 0.0).clamp(0.02, 1.0), chroma };
                     let reach = r * (1.25 + 0.06 * chroma) / if sides > 0 { (std::f32::consts::PI / sides as f32).cos() } else { 1.0 };
                     Elem { cx, cy, col, shape, bbox: BBox::around(cx, cy, reach, reach) }
+                }
+                FlareElement::Wash { reach, spread, chroma, angle, .. } => {
+                    let reach = (pos(reach) * u).max(1.0);
+                    // Into the frame: from the source towards the centre (or along the rotation
+                    // when the source is the centre), turned by the rotation and the element's angle.
+                    let base = if away != (0.0, 0.0) { away.1.atan2(away.0) } else { 0.0 };
+                    let (s, c) = (base + rot + finite(angle, 0.0).to_radians()).sin_cos();
+                    // The light enters where the line from the source outwards leaves the frame (at
+                    // most a reach behind the source; at the source when it is outside the frame).
+                    let exit = |p: f32, d: f32, lo: f32, hi: f32| {
+                        if d > 1e-6 {
+                            (lo - p) / -d
+                        } else if d < -1e-6 {
+                            (hi - p) / -d
+                        } else {
+                            f32::INFINITY
+                        }
+                    };
+                    let (x0, y0, x1, y1) = (canvas.x0 as f32, canvas.y0 as f32, canvas.x1 as f32, canvas.y1 as f32);
+                    let back = exit(sx, c, x0, x1).min(exit(sy, s, y0, y1)).clamp(0.0, reach * WASH_APEX);
+                    let (cx, cy) = (sx - c * back, sy - s * back);
+                    let spread = finite(spread, 30.0).clamp(1.0, 180.0).to_radians();
+                    let chroma = finite(chroma, 0.0).clamp(0.0, 2.0);
+                    let peak = col[0].max(col[1]).max(col[2]);
+                    let shape = Shape::Wash { dir: (c, s), reach, spread, chroma, peak };
+                    Elem { cx, cy, col, shape, bbox: BBox::around(cx, cy, reach * WASH_REACH, reach * WASH_REACH) }
                 }
             };
             elems.push(el);
@@ -275,17 +335,28 @@ impl Prepared {
             ty = ch - ty;
         }
         let (qx, qy) = (tx * self.tex_unit, ty * self.tex_unit);
-        if t.kind == TextureKind::FilmGrain {
-            let n = hash01(hash2((qx * 1.5) as i32, (qy * 1.5) as i32, 77)) - 0.5;
+        let grain = match t.kind {
+            TextureKind::FilmGrain => Some((hash01(hash2((qx * 1.5) as i32, (qy * 1.5) as i32, 77)) - 0.5, 0.9)),
+            // Clumps a few texture units wide, with a little fine grain on top.
+            TextureKind::CoarseGrain => {
+                let clump = value_noise(qx / 4.0, qy / 4.0, 78) + 0.6 * value_noise(qx / 1.6, qy / 1.6, 79);
+                let fine = hash01(hash2((qx * 1.5) as i32, (qy * 1.5) as i32, 80));
+                Some(((clump / 1.6 - 0.5) * 1.6 + 0.25 * (fine - 0.5), 1.1))
+            }
+            // One value per pixel, whatever the canvas size: the finest grain the image can hold.
+            TextureKind::FineGrain => Some((hash01(hash2(tx.floor() as i32, ty.floor() as i32, 81)) - 0.5, 0.6)),
+            _ => None,
+        };
+        if let Some((n, amount)) = grain {
             let lum = l[0].max(l[1]).max(l[2]);
             for v in l.iter_mut() {
-                *v *= 1.0 + t.opacity * 0.9 * n;
+                *v *= 1.0 + t.opacity * amount * n;
             }
             // A faint veil of grain in the broad light too.
             let d = (x - self.sx).hypot(y - self.sy);
             let broad = (-d / self.tex_radius).exp() * (1.0 - lum.min(1.0));
             for (v, c) in l.iter_mut().zip(self.tex_color) {
-                *v += t.opacity * 0.08 * (n + 0.5) * broad * c;
+                *v += t.opacity * 0.08 * (n + 0.5).max(0.0) * broad * c;
             }
             return;
         }
@@ -404,9 +475,38 @@ impl Elem {
                     *v += self.col[k] * shade;
                 }
             }
+            Shape::Wash { dir, reach, spread, chroma, peak } => {
+                let d = dx.hypot(dy);
+                if d >= reach * WASH_REACH {
+                    return;
+                }
+                let along = dx * dir.0 + dy * dir.1;
+                let across = (-dx * dir.1 + dy * dir.0).abs();
+                let theta = across.atan2(along);
+                // The cone opens to a half-disc near where the light enters, so the edge glows
+                // broadly instead of ending in a point.
+                let open = spread + std::f32::consts::PI * (-d / (0.45 * reach)).exp();
+                let cone = (-(theta / open).powi(2)).exp();
+                let fade = (-d / reach).exp();
+                // A faint veil all round, the cone carrying most of the light.
+                add(l, self.col, fade * (0.05 + 0.95 * cone));
+                if chroma > 0.0 && cone > CUTOFF {
+                    // Red outside, blue inside: a faint rainbow fringe where the wash fades.
+                    let (r0, w) = (reach * 0.9, reach * 0.1);
+                    for (k, v) in l.iter_mut().enumerate() {
+                        let e = (d - r0 * (1.0 + 0.06 * chroma * (1.0 - k as f32))) / w;
+                        *v += peak * 0.18 * chroma * cone * (-e * e).exp();
+                    }
+                }
+            }
         }
     }
 }
+
+/// How far behind the source a wash may start (at the frame edge), in reaches.
+const WASH_APEX: f32 = 1.0;
+/// Reaches after which a wash's light is below [`CUTOFF`].
+const WASH_REACH: f32 = 8.5;
 
 fn add(l: &mut [f32; 3], col: [f32; 3], v: f32) {
     if v > CUTOFF {
@@ -435,6 +535,12 @@ fn hash01(h: u32) -> f32 {
     (h & 0x00ff_ffff) as f32 / 16_777_216.0
 }
 
+/// An independent `0..1` value drawn from hash `h` for property `k` (rehashed, since XOR-ing a
+/// small constant into `h` changes only its low bits and leaves the draws correlated).
+fn sub(h: u32, k: u32) -> f32 {
+    hash01(hash2(h as i32, k as i32, 0x2c1b))
+}
+
 /// Value noise in `0..=1` at `(x, y)` (lattice spacing 1).
 fn value_noise(x: f32, y: f32, seed: i32) -> f32 {
     let (x0, y0) = (x.floor(), y.floor());
@@ -452,7 +558,21 @@ fn value_noise(x: f32, y: f32, seed: i32) -> f32 {
 fn dirt(kind: TextureKind, x: f32, y: f32) -> f32 {
     // (cell size, probability, radius range, seed) of the spotted kinds.
     let (cell, prob, rmin, rmax, seed) = match kind {
-        TextureKind::None | TextureKind::FilmGrain => return 0.0,
+        TextureKind::None | TextureKind::FilmGrain | TextureKind::CoarseGrain | TextureKind::FineGrain => return 0.0,
+        TextureKind::GlassArcs => return glass_arcs(x, y),
+        TextureKind::HazyGlass => {
+            // Low, uneven fog with fine dust caught in it.
+            // Octaves on rotated lattices, so the fog shows no grid.
+            let (rx, ry) = (0.8 * x - 0.6 * y, 0.6 * x + 0.8 * y);
+            let fog = 0.5 * value_noise(x / 150.0, y / 150.0, 31) + 0.3 * value_noise(rx / 60.0, ry / 60.0, 32) + 0.2 * value_noise(ry / 23.0, -rx / 23.0, 36);
+            return 0.3 * smoothstep(0.25, 0.85, fog) + 0.6 * dirt(TextureKind::Dust, x, y) * (0.4 + fog);
+        }
+        TextureKind::BrushedSteel => {
+            // Lattice stretched ~300:1 along x: long parallel lines that drift in brightness.
+            let lines = 0.6 * value_noise(x / 260.0, y / 0.9, 33) + 0.4 * value_noise(x / 70.0, y / 0.45, 34);
+            let sheen = value_noise(x / 300.0, y / 300.0, 35);
+            return smoothstep(0.35, 0.95, lines) * (0.15 + 0.3 * sheen);
+        }
         TextureKind::Smudge => {
             let n = 0.6 * value_noise(x / 140.0, y / 140.0, 11) + 0.3 * value_noise(x / 55.0, y / 55.0, 12) + 0.1 * value_noise(x / 18.0, y / 18.0, 13);
             return smoothstep(0.5, 0.85, n) * 0.6;
@@ -462,6 +582,10 @@ fn dirt(kind: TextureKind, x: f32, y: f32) -> f32 {
         TextureKind::HexDust => (90.0, 0.5, 14.0, 38.0, 23),
         TextureKind::Raindrops => (70.0, 0.5, 8.0, 26.0, 24),
         TextureKind::Scratches => (200.0, 0.8, 50.0, 95.0, 25),
+        TextureKind::SoftOrbs => (45.0, 0.6, 6.0, 20.0, 26),
+        // Spots reach 6× their radius sideways, which stays inside one cell.
+        TextureKind::StretchedSpecks => (40.0, 0.5, 1.0, 3.0, 27),
+        TextureKind::BokehBubbles => (230.0, 0.5, 45.0, 105.0, 28),
     };
     let (cx, cy) = ((x / cell).floor() as i32, (y / cell).floor() as i32);
     let mut best = 0.0f32;
@@ -471,10 +595,10 @@ fn dirt(kind: TextureKind, x: f32, y: f32) -> f32 {
             if hash01(h) > prob {
                 continue;
             }
-            let px = (cx + i) as f32 * cell + hash01(h ^ 0x68e3) * cell;
-            let py = (cy + j) as f32 * cell + hash01(h ^ 0x2b79) * cell;
-            let r = rmin + (rmax - rmin) * hash01(h ^ 0x4cf5);
-            let b = 0.35 + 0.65 * hash01(h ^ 0x1d87);
+            let px = (cx + i) as f32 * cell + sub(h, 0x68e3) * cell;
+            let py = (cy + j) as f32 * cell + sub(h, 0x2b79) * cell;
+            let r = rmin + (rmax - rmin) * sub(h, 0x4cf5);
+            let b = 0.35 + 0.65 * sub(h, 0x1d87);
             let (dx, dy) = (x - px, y - py);
             let v = match kind {
                 TextureKind::Dust => b * (1.0 - smoothstep(r * 0.4, r, dx.hypot(dy))),
@@ -490,14 +614,10 @@ fn dirt(kind: TextureKind, x: f32, y: f32) -> f32 {
                 }
                 TextureKind::Raindrops => {
                     let d = dx.hypot(dy) / r;
-                    if d > 1.2 {
-                        0.0
-                    } else {
-                        b * (0.18 * (1.0 - smoothstep(0.8, 1.0, d)) + 0.9 * (-((d - 0.88) / 0.1).powi(2)).exp())
-                    }
+                    if d > 1.2 { 0.0 } else { b * (0.18 * (1.0 - smoothstep(0.8, 1.0, d)) + 0.9 * (-((d - 0.88) / 0.1).powi(2)).exp()) }
                 }
                 TextureKind::Scratches => {
-                    let ang = hash01(h ^ 0x7a1c) * std::f32::consts::PI;
+                    let ang = sub(h, 0x7a1c) * std::f32::consts::PI;
                     let (s, c) = ang.sin_cos();
                     let along = (dx * c + dy * s).abs();
                     if along > r {
@@ -507,10 +627,47 @@ fn dirt(kind: TextureKind, x: f32, y: f32) -> f32 {
                         b * 0.8 * (-(perp / 0.7).powi(2)).exp() * (1.0 - along / r)
                     }
                 }
-                TextureKind::None | TextureKind::FilmGrain | TextureKind::Smudge => 0.0,
+                TextureKind::SoftOrbs => {
+                    let d = dx.hypot(dy) / r;
+                    b * 0.4 * (1.0 - smoothstep(0.2, 1.0, d))
+                }
+                TextureKind::StretchedSpecks => {
+                    let d = (dx / (r * 6.0)).hypot(dy / r);
+                    b * (1.0 - smoothstep(0.3, 1.0, d))
+                }
+                TextureKind::BokehBubbles => {
+                    let d = dx.hypot(dy) / r;
+                    if d > 1.1 {
+                        0.0
+                    } else {
+                        // A flat body that brightens to a crisp rim, with a faint inner ring.
+                        let body = (1.0 - smoothstep(0.96, 1.02, d)) * (0.22 + 0.18 * d * d);
+                        let rim = (-((d - 0.97) / 0.035).powi(2)).exp();
+                        let inner = 0.12 * (-((d - 0.7) / 0.05).powi(2)).exp();
+                        b * 0.7 * (body + 0.55 * rim + inner)
+                    }
+                }
+                _ => 0.0,
             };
             best = best.max(v);
         }
+    }
+    best
+}
+
+/// Curved streaks: arcs around two far-away centres, broken up along their length, as reflections
+/// on a bent sheet of glass.
+fn glass_arcs(x: f32, y: f32) -> f32 {
+    let mut best = 0.0f32;
+    for (cx, cy, seed) in [(-250.0f32, 950.0f32, 41), (1250.0, -420.0, 42)] {
+        let (dx, dy) = (x - cx, y - cy);
+        let r = dx.hypot(dy);
+        // Arc length along the circle, so streaks keep their width whatever the radius.
+        let s = dy.atan2(dx) * r;
+        let band = value_noise(r / 4.0, s / 160.0, seed);
+        let streak = smoothstep(0.7, 0.97, band);
+        let patch = smoothstep(0.45, 0.85, value_noise(r / 140.0, s / 220.0, seed + 7));
+        best = best.max(0.4 * streak * patch);
     }
     best
 }
@@ -601,6 +758,88 @@ mod tests {
         assert!(px.iter().flatten().all(|v| v.is_finite()));
         assert!(render(&f, Rect::EMPTY, canvas()).is_empty());
         assert!(render(&f, canvas(), Rect::EMPTY).iter().all(|p| p[3] == 0.0));
+        for (reach, spread, chroma, angle) in [(f32::NAN, f32::NAN, f32::NAN, f32::NAN), (1e30, -5.0, 1e9, f32::INFINITY), (0.0, 0.0, -1.0, 0.0)] {
+            f.elements = vec![FlareElement::Wash { reach, spread, intensity: 1.0, color: [1.0; 3], chroma, angle }];
+            for source in [(0.5, 0.5), (-1.0, 2.0), (0.0, 0.0)] {
+                f.source = source;
+                assert!(render(&f, canvas(), canvas()).iter().flatten().all(|v| v.is_finite() && (0.0..=1.0).contains(v)), "{reach} {spread} {source:?}");
+            }
+        }
+    }
+
+    fn wash_flare(chroma: f32) -> lens_flare::LensFlare {
+        let mut f = lens_flare::LensFlare::new(
+            FlareCategory::SunFlare,
+            "x",
+            vec![FlareElement::Wash { reach: 400.0, spread: 25.0, intensity: 0.6, color: [1.0, 0.8, 0.5], chroma, angle: 0.0 }],
+        );
+        f.source = (0.1, 0.5);
+        f
+    }
+
+    #[test]
+    fn wash_pours_in_from_the_edge_past_the_source() {
+        let px = render(&wash_flare(0.0), canvas(), canvas());
+        // The source is at x = 16; the frame centre is to its right.
+        let lum = |x: usize, y: usize| at(&px, 160, x, y)[3];
+        assert!(lum(1, 45) > lum(60, 45), "brightest where the light enters, at the left edge");
+        assert!(lum(60, 45) > lum(16, 1), "the cone points into the frame, not sideways: {} vs {}", lum(60, 45), lum(16, 1));
+        assert!(lum(60, 45) > 0.05);
+        // Turning it moves the cone: 90° points it down.
+        let mut down = wash_flare(0.0);
+        down.elements = vec![FlareElement::Wash { reach: 400.0, spread: 25.0, intensity: 0.6, color: [1.0, 0.8, 0.5], chroma: 0.0, angle: 90.0 }];
+        let turned = render(&down, canvas(), canvas());
+        assert!(at(&turned, 160, 16, 85)[3] > at(&px, 160, 16, 85)[3]);
+    }
+
+    #[test]
+    fn wash_chroma_adds_a_rainbow_fringe() {
+        let plain = render(&wash_flare(0.0), canvas(), canvas());
+        let fringed = render(&wash_flare(2.0), canvas(), canvas());
+        assert_ne!(plain, fringed);
+        // Somewhere along the axis the fringe separates the channels in both directions.
+        let row: Vec<[f32; 4]> = (0..160).map(|x| at(&fringed, 160, x, 45)).collect();
+        let base: Vec<[f32; 4]> = (0..160).map(|x| at(&plain, 160, x, 45)).collect();
+        let redder = row.iter().zip(&base).any(|(f, p)| f[0] * f[3] - p[0] * p[3] > (f[2] * f[3] - p[2] * p[3]) + 0.01);
+        let bluer = row.iter().zip(&base).any(|(f, p)| f[2] * f[3] - p[2] * p[3] > (f[0] * f[3] - p[0] * p[3]) + 0.01);
+        assert!(redder && bluer, "a red and a blue band");
+    }
+
+    #[test]
+    fn wash_tiles_match_one_render() {
+        let mut f = wash_flare(1.0);
+        f.texture.kind = TextureKind::GlassArcs;
+        let whole = render(&f, canvas(), canvas());
+        let tile = Rect::new(10, 5, 90, 70);
+        let part = render(&f, tile, canvas());
+        for y in 5..70 {
+            for x in 10..90 {
+                assert_eq!(part[(y - 5) * 80 + (x - 10)], at(&whole, 160, x, y));
+            }
+        }
+    }
+
+    #[test]
+    fn every_texture_renders_deterministically_and_shows() {
+        let mut base = lens_flare::preset("Morning Spill").map(|p| p.flare()).unwrap_or_else(|| wash_flare(0.0));
+        base.texture.opacity = 1.0;
+        let c = Rect::new(0, 0, 320, 180);
+        let none = render(&base, c, c);
+        let mut seen: Vec<Vec<[f32; 4]>> = Vec::new();
+        for kind in TextureKind::ALL.into_iter().filter(|k| *k != TextureKind::None) {
+            let mut f = base.clone();
+            f.texture.kind = kind;
+            let a = render(&f, c, c);
+            assert_eq!(a, render(&f, c, c), "{kind:?} is deterministic");
+            assert!(a.iter().flatten().all(|v| v.is_finite() && (0.0..=1.0).contains(v)), "{kind:?}");
+            let changed = a.iter().zip(&none).filter(|(p, q)| (p[3] - q[3]).abs() > 1e-3).count();
+            assert!(changed > a.len() / 200, "{kind:?} changes only {changed} pixels");
+            assert!(!seen.contains(&a), "{kind:?} looks like another texture");
+            seen.push(a);
+            // Flipping moves it.
+            f.texture.flip_x = true;
+            assert_ne!(render(&f, c, c), seen[seen.len() - 1], "{kind:?} flips");
+        }
     }
 }
 
@@ -625,6 +864,24 @@ mod dump {
             let px = render(&f, c, c);
             let bytes: Vec<u8> = px.iter().flatten().flat_map(|v| v.to_le_bytes()).collect();
             std::fs::write(format!("{dir}/{i:02}_{}.raw", p.name.replace(' ', "_")), bytes).unwrap();
+        }
+    }
+
+    /// Dumps every texture under one flare (`FLARE_DUMP=dir cargo test -p photocraft-compose dump -- --ignored`).
+    #[test]
+    #[ignore]
+    fn dump_textures() {
+        let Ok(dir) = std::env::var("FLARE_DUMP") else { return };
+        let c = Rect::new(0, 0, 480, 270);
+        let Some(p) = photocraft_doc::lens_flare::preset("Morning Spill") else { return };
+        for (i, kind) in TextureKind::ALL.into_iter().enumerate() {
+            let mut f = p.flare();
+            f.source = (0.3, 0.35);
+            f.texture.kind = kind;
+            f.texture.opacity = 1.0;
+            let px = render(&f, c, c);
+            let bytes: Vec<u8> = px.iter().flatten().flat_map(|v| v.to_le_bytes()).collect();
+            std::fs::write(format!("{dir}/tex{i:02}_{}.raw", kind.id()), bytes).unwrap();
         }
     }
 }
