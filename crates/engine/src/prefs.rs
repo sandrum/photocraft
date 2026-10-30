@@ -1316,7 +1316,7 @@ impl Session {
     }
 
     /// Push engine-relevant preferences into live state: every document's history limit and
-    /// linearity, the transform and layer-effect cache budgets and the text engine's
+    /// linearity, the transform, layer-effect and lens flare cache budgets and the text engine's
     /// missing-glyph protection.
     pub fn apply_prefs(&mut self) {
         let n = self.prefs().performance.history_states.max(1) as usize;
@@ -1331,6 +1331,8 @@ impl Session {
         }
         photocraft_compose::set_effect_cache_budget(budget << 20);
         crate::transform_cmds::set_budget(u64::from(self.prefs().performance.effective_memory_usage_mb()) << 20);
+        // A quarter of Memory Usage for rendered lens flares (2 GiB by default).
+        photocraft_compose::lens_flare::set_cache_budget((self.prefs().performance.effective_memory_usage_mb() as usize / 4) << 20);
         // Without waiting for the system font scan: this runs on the UI thread at launch.
         photocraft_text::set_shared_missing_glyph_protection(self.prefs().type_.missing_glyph_protection());
         crate::plugin_cmds::sync_prefs(self);

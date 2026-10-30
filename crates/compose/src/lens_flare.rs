@@ -14,6 +14,9 @@
 use photocraft_doc::lens_flare::{FlareElement, LensFlare, TextureKind};
 use photocraft_geom::Rect;
 
+mod cache;
+pub use cache::{cache_bytes, purge_cache, set_cache_budget};
+
 /// Light below this contributes nothing visible even at 16 bits.
 const CUTOFF: f32 = 1.0 / 4096.0;
 
@@ -27,20 +30,35 @@ pub fn render(flare: &LensFlare, rect: Rect, canvas: Rect) -> Vec<[f32; 4]> {
 /// off over thousands of pixels, so undithered they reach the 8-bit image as wide one-level
 /// rings (tinted where the channels round at different radii); the noise breaks them up.
 pub fn render_quantized(flare: &LensFlare, rect: Rect, canvas: Rect, quantum: Option<f32>) -> Vec<[f32; 4]> {
+    cache::render(flare, rect, canvas, quantum)
+}
+
+/// [`render_quantized`] without the tile cache.
+pub fn render_uncached(flare: &LensFlare, rect: Rect, canvas: Rect, quantum: Option<f32>) -> Vec<[f32; 4]> {
+    let n = rect.width() as usize * rect.height() as usize;
+    match light(flare, rect, canvas, quantum) {
+        Some(l) => l.into_iter().map(to_rgba).collect(),
+        None => vec![[0.0; 4]; n],
+    }
+}
+
+/// The burnt (and, with `quantum`, dithered) light over `rect`, row-major; `None` when no
+/// element nor the texture reaches it (all dark).
+fn light(flare: &LensFlare, rect: Rect, canvas: Rect, quantum: Option<f32>) -> Option<Vec<[f32; 3]>> {
     let (w, h) = (rect.width() as usize, rect.height() as usize);
-    let mut px = vec![[0.0f32; 4]; w * h];
     if w == 0 || h == 0 || canvas.is_empty() {
-        return px;
+        return None;
     }
     let prep = Prepared::new(flare, canvas);
     let live: Vec<&Elem> = prep.elems.iter().filter(|e| e.bbox.reaches(rect)).collect();
     let texture = prep.texture.kind != TextureKind::None && prep.texture.opacity > 0.0;
     if live.is_empty() && !texture {
-        return px;
+        return None;
     }
-    for (row, y) in (rect.y0..rect.y1).enumerate() {
+    let mut px = Vec::with_capacity(w * h);
+    for y in rect.y0..rect.y1 {
         let fy = y as f32 + 0.5;
-        for (col, x) in (rect.x0..rect.x1).enumerate() {
+        for x in rect.x0..rect.x1 {
             let fx = x as f32 + 0.5;
             let mut l = [0.0f32; 3];
             for e in &live {
@@ -56,12 +74,10 @@ pub fn render_quantized(flare: &LensFlare, rect: Rect, canvas: Rect, quantum: Op
             {
                 dither(&mut l, x, y, q);
             }
-            if let Some(p) = px.get_mut(row * w + col) {
-                *p = to_rgba(l);
-            }
+            px.push(l);
         }
     }
-    px
+    Some(px)
 }
 
 /// Light into `0..=1`: hot channels spill into the others (cores burn to white).
