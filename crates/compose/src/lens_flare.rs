@@ -8,8 +8,10 @@
 //! it. Transparent where the flare adds nothing, so masks, opacity and other layers behave as
 //! with any fill.
 //!
-//! Elements are prepared once per call with their canvas-space bounding box, and only those
-//! that reach the rendered rect are evaluated per pixel.
+//! Elements are prepared once per call with their canvas-space bounding box ([`prepare`]), and
+//! only those that reach the rendered rect are evaluated per pixel. The GPU compositor evaluates
+//! the same [`Prepared`] flare in a shader (`photocraft-gpu`'s `flare.wgsl`), so the per-element
+//! constants are worked out here once for both.
 
 use photocraft_doc::lens_flare::{FlareElement, LensFlare, TextureKind};
 use photocraft_geom::Rect;
@@ -18,7 +20,7 @@ mod cache;
 pub use cache::{cache_bytes, purge_cache, set_cache_budget};
 
 /// Light below this contributes nothing visible even at 16 bits.
-const CUTOFF: f32 = 1.0 / 4096.0;
+pub const CUTOFF: f32 = 1.0 / 4096.0;
 
 /// The flare's pixels over `rect`, laid out on `canvas` (straight RGBA, row-major).
 pub fn render(flare: &LensFlare, rect: Rect, canvas: Rect) -> Vec<[f32; 4]> {
@@ -49,9 +51,9 @@ fn light(flare: &LensFlare, rect: Rect, canvas: Rect, quantum: Option<f32>) -> O
     if w == 0 || h == 0 || canvas.is_empty() {
         return None;
     }
-    let prep = Prepared::new(flare, canvas);
+    let prep = prepare(flare, canvas);
     let live: Vec<&Elem> = prep.elems.iter().filter(|e| e.bbox.reaches(rect)).collect();
-    let texture = prep.texture.kind != TextureKind::None && prep.texture.opacity > 0.0;
+    let texture = prep.has_texture();
     if live.is_empty() && !texture {
         return None;
     }
@@ -100,11 +102,16 @@ fn burn(mut l: [f32; 3]) -> [f32; 3] {
 /// light sits near a level for long, and a glow's falloff does for hundreds of pixels; the
 /// triangular one makes the rounding error independent of the light, so no band survives.
 fn dither(l: &mut [f32; 3], x: i32, y: i32, q: f32) {
-    let n = photocraft_color::dither_noise(x, y) + photocraft_color::dither_noise(x.wrapping_add(7919), y.wrapping_add(104_729)) - 1.0;
+    let n = photocraft_color::dither_noise(x, y) + photocraft_color::dither_noise(x.wrapping_add(DITHER_DX), y.wrapping_add(DITHER_DY)) - 1.0;
     for v in l.iter_mut() {
         *v = ((*v * q + n + 0.5).floor() / q).clamp(0.0, 1.0);
     }
 }
+
+/// Offset of the second [`photocraft_color::dither_noise`] draw of the triangular dither.
+pub const DITHER_DX: i32 = 7919;
+/// See [`DITHER_DX`].
+pub const DITHER_DY: i32 = 104_729;
 
 /// Burnt light to straight RGBA: `alpha = max`, `rgb = light / alpha`.
 fn to_rgba(l: [f32; 3]) -> [f32; 4] {
@@ -115,12 +122,13 @@ fn to_rgba(l: [f32; 3]) -> [f32; 4] {
     [(l[0] / a).min(1.0), (l[1] / a).min(1.0), (l[2] / a).min(1.0), a]
 }
 
-#[derive(Clone, Copy)]
-struct BBox {
-    x0: f32,
-    y0: f32,
-    x1: f32,
-    y1: f32,
+/// An element's canvas-space bounding box: it adds no light outside.
+#[derive(Clone, Copy, Debug)]
+pub struct BBox {
+    pub x0: f32,
+    pub y0: f32,
+    pub x1: f32,
+    pub y1: f32,
 }
 
 impl BBox {
@@ -132,7 +140,10 @@ impl BBox {
     }
 }
 
-enum Shape {
+/// An element's shape with its per-element constants (lengths in canvas pixels, angles in
+/// radians).
+#[derive(Clone, Debug)]
+pub enum Shape {
     Glow {
         r: f32,
         gauss: bool,
@@ -152,12 +163,12 @@ enum Shape {
         len: f32,
         th: f32,
     },
+    /// `rays` holds one entry per ray (`count` of them).
     Rays {
         rot: f32,
-        count: u32,
         len: f32,
         th: f32,
-        seed: u32,
+        rays: Vec<Ray>,
     },
     Ring {
         r: f32,
@@ -184,30 +195,52 @@ enum Shape {
     },
 }
 
-struct Elem {
-    cx: f32,
-    cy: f32,
-    /// Colour × intensity × gain × brightness.
-    col: [f32; 3],
-    shape: Shape,
-    bbox: BBox,
+/// One ray of a [`Shape::Rays`] burst, drawn from its seed: its angle (radians, before the
+/// burst's rotation), length (px) and strength.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Ray {
+    pub phi: f32,
+    pub reach: f32,
+    pub strength: f32,
 }
 
-struct Prepared {
-    elems: Vec<Elem>,
+/// One element of a [`Prepared`] flare.
+#[derive(Clone, Debug)]
+pub struct Elem {
+    /// Centre (canvas pixels).
+    pub cx: f32,
+    pub cy: f32,
+    /// Colour × intensity × gain × brightness.
+    pub col: [f32; 3],
+    pub shape: Shape,
+    pub bbox: BBox,
+}
+
+/// A flare laid out on a canvas: everything the per-pixel evaluation needs ([`prepare`]).
+#[derive(Clone, Debug)]
+pub struct Prepared {
+    /// The elements that add light (those that can't are dropped).
+    pub elems: Vec<Elem>,
     /// Source position and the local frame of the source's glows (rotation, aspect).
-    sx: f32,
-    sy: f32,
-    cos: f32,
-    sin: f32,
-    inv_aspect: f32,
-    texture: photocraft_doc::lens_flare::FlareTexture,
+    pub sx: f32,
+    pub sy: f32,
+    pub cos: f32,
+    pub sin: f32,
+    pub inv_aspect: f32,
+    /// The flare's texture (sanitised).
+    pub texture: photocraft_doc::lens_flare::FlareTexture,
     /// Texture lookup: canvas origin and size, texture units per pixel.
-    canvas: (f32, f32, f32, f32),
-    tex_unit: f32,
+    pub canvas: (f32, f32, f32, f32),
+    pub tex_unit: f32,
     /// Broad light the texture shows in: radius around the source and its colour.
-    tex_radius: f32,
-    tex_color: [f32; 3],
+    pub tex_radius: f32,
+    pub tex_color: [f32; 3],
+}
+
+/// `flare` laid out on `canvas`: its elements' positions, sizes, colours and per-element
+/// constants, worked out once for every pixel ([`render_quantized`], the GPU compositor).
+pub fn prepare(flare: &LensFlare, canvas: Rect) -> Prepared {
+    Prepared::new(flare, canvas)
 }
 
 fn hue_rgb(h: f32) -> [f32; 3] {
@@ -238,6 +271,11 @@ fn finite(v: f32, d: f32) -> f32 {
 }
 
 impl Prepared {
+    /// Whether the texture adds anything.
+    pub fn has_texture(&self) -> bool {
+        self.texture.kind != TextureKind::None && self.texture.opacity > 0.0
+    }
+
     fn new(flare: &LensFlare, canvas: Rect) -> Prepared {
         let f = flare.clone().sanitized();
         let (cw, ch) = (canvas.width() as f32, canvas.height() as f32);
@@ -308,7 +346,7 @@ impl Prepared {
                 FlareElement::Rays { count, length, seed, .. } => {
                     let len = (pos(length) * u).max(1.0);
                     let count = count.clamp(1, photocraft_doc::lens_flare::range::MAX_RAYS);
-                    let shape = Shape::Rays { rot, count, len, th: (0.7 * u).max(0.35), seed };
+                    let shape = Shape::Rays { rot, len, th: (0.7 * u).max(0.35), rays: rays(count, len, seed) };
                     Elem { cx: sx, cy: sy, col, shape, bbox: BBox::around(sx, sy, len, len) }
                 }
                 FlareElement::Ring { t, radius, width, chroma, arc, .. } => {
@@ -425,6 +463,20 @@ impl Prepared {
     }
 }
 
+/// The rays of a burst of `count` with length `len` from `seed`.
+fn rays(count: u32, len: f32, seed: u32) -> Vec<Ray> {
+    let step = std::f32::consts::TAU / count as f32;
+    (0..count as i32)
+        .map(|k| {
+            let hseed = hash2(k, seed as i32, 0x51ed);
+            let phi = (k as f32 + hash01(hseed)) * step;
+            let reach = len * (0.25 + 0.75 * hash01(hseed ^ 0x9e37));
+            let strength = 0.35 + 0.65 * hash01(hseed ^ 0x7f4a);
+            Ray { phi, reach, strength }
+        })
+        .collect()
+}
+
 impl Elem {
     fn add(&self, x: f32, y: f32, p: &Prepared, l: &mut [f32; 3]) {
         if x < self.bbox.x0 || x > self.bbox.x1 || y < self.bbox.y0 || y > self.bbox.y1 {
@@ -469,20 +521,18 @@ impl Elem {
                 let v = (-(perp / w).powi(2)).exp() * (1.0 - k).powi(2);
                 add(l, self.col, v);
             }
-            Shape::Rays { rot, count, len, th, seed } => {
+            Shape::Rays { rot, len, th, ref rays } => {
                 let d = dx.hypot(dy);
                 if d >= len || d < 0.5 {
                     return;
                 }
+                let count = rays.len() as i32;
                 let step = std::f32::consts::TAU / count as f32;
                 let a = (dy.atan2(dx) - rot).rem_euclid(std::f32::consts::TAU);
                 let bin = (a / step) as i32;
                 let mut v = 0.0f32;
                 for b in [bin - 1, bin, bin + 1] {
-                    let k = b.rem_euclid(count as i32);
-                    let hseed = hash2(k, seed as i32, 0x51ed);
-                    let phi = (k as f32 + hash01(hseed)) * step;
-                    let reach = len * (0.25 + 0.75 * hash01(hseed ^ 0x9e37));
+                    let Some(&Ray { phi, reach, strength }) = rays.get(b.rem_euclid(count.max(1)) as usize) else { continue };
                     let delta = {
                         let raw = a - phi;
                         raw - (raw / std::f32::consts::TAU).round() * std::f32::consts::TAU
@@ -492,7 +542,6 @@ impl Elem {
                         continue;
                     }
                     let perp = d * delta.sin().abs();
-                    let strength = 0.35 + 0.65 * hash01(hseed ^ 0x7f4a);
                     v += strength * (-(perp / th).powi(2)).exp() * (1.0 - along / reach).powf(1.5);
                 }
                 add(l, self.col, v);
@@ -559,7 +608,7 @@ impl Elem {
 /// How far behind the source a wash may start (at the frame edge), in reaches.
 const WASH_APEX: f32 = 1.0;
 /// Reaches after which a wash's light is below [`CUTOFF`].
-const WASH_REACH: f32 = 8.5;
+pub const WASH_REACH: f32 = 8.5;
 
 /// The canvas diagonal (px) up to which thin details (streak and star cores, hot cores) scale
 /// with the flare like everything else: about a preset thumbnail's. Past it they grow more
