@@ -546,7 +546,7 @@ pub struct PhotocraftApp {
     pub(crate) solid_fill_preview: Option<solid_fill_ui::Preview>,
     /// Live Pattern Fill dialog preview (pattern_fill_ui).
     pub(crate) pattern_fill_preview: Option<pattern_fill_ui::Preview>,
-    /// Live Lens Flare dialog preview (lens_flare_ui).
+    /// Live Light Flare dialog preview (lens_flare_ui).
     pub(crate) lens_flare_preview: Option<lens_flare_ui::Preview>,
     /// Shape fill Color Picker preview (shape_fill_ui).
     pub(crate) shape_fill_preview: Option<shape_fill_ui::Preview>,

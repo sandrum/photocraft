@@ -1,4 +1,4 @@
-//! Looks for a Lens Flare layer (the dialog's Filters tab): a colour grade made of ordinary
+//! Looks for a Light Flare layer (the dialog's Filters tab): a colour grade made of ordinary
 //! adjustment layers (Curves, Hue/Saturation, Color Balance, Photo Filter, Vibrance, …) in one
 //! pass-through group directly above the flare, so it grades the whole image, flare included,
 //! and stays editable like any adjustment. The group carries an XMP tag naming the look and its
@@ -93,14 +93,14 @@ impl Look {
     }
 }
 
-const TAG_LOOK: &str = "pcLensFlare:look=\"";
-const TAG_LAYER: &str = "pcLensFlare:layer=\"";
+const TAG_LOOK: &str = "pcLightFlare:look=\"";
+const TAG_LAYER: &str = "pcLightFlare:layer=\"";
 
 /// The XMP packet that marks a look group: which look, for which flare layer.
 fn tag(look: &str, flare: LayerId) -> String {
     format!(
         "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\
-         <rdf:Description rdf:about=\"\" xmlns:pcLensFlare=\"urn:photocraft:lens-flare:1\" {TAG_LOOK}{look}\" {TAG_LAYER}{}\"/>\
+         <rdf:Description rdf:about=\"\" xmlns:pcLightFlare=\"urn:photocraft:light-flare:1\" {TAG_LOOK}{look}\" {TAG_LAYER}{}\"/>\
          </rdf:RDF></x:xmpmeta>",
         flare.0
     )
@@ -140,7 +140,7 @@ pub fn param(cmd: &str, p: &Value) -> Result<Option<&'static Look>> {
     match p.get("look") {
         None | Some(Value::Null) => Ok(None),
         Some(v) => {
-            let id = v.as_str().ok_or_else(|| bad(cmd, "`look` is a look id (see layer.fill.lensFlare.presets)"))?;
+            let id = v.as_str().ok_or_else(|| bad(cmd, "`look` is a look id (see layer.fill.lightFlare.presets)"))?;
             look(id).map(Some).ok_or_else(|| {
                 let ids: Vec<&str> = LOOKS.iter().map(|l| l.id).collect();
                 bad(cmd, format!("no look \"{id}\": one of {}", ids.join(", ")))

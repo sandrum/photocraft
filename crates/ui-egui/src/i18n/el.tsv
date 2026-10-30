@@ -4204,3 +4204,7 @@ curves	Smooth	Εξομάλυνση
 	Font size presets	Προεπιλογές μεγέθους γραμματοσειράς
 	Leading presets	Προεπιλογές διάστιχου
 	Tracking presets	Προεπιλογές διαστήματος χαρακτήρων
+
+# Light Flare fill layers (Layer › New Fill Layer › Light Flare…), distinct from the Lens Flare filter
+	Light Flare…	Λάμψη φωτός…
+	Light Flare	Λάμψη φωτός

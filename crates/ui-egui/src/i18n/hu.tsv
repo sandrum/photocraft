@@ -4415,3 +4415,7 @@ cameraRaw	Yellow	Sárga
 	Font size presets	Betűméret-előbeállítások
 	Leading presets	Sorköz-előbeállítások
 	Tracking presets	Betűköz-előbeállítások
+
+# Light Flare fill layers (Layer › New Fill Layer › Light Flare…), distinct from the Lens Flare filter
+	Light Flare…	Fényvillanás…
+	Light Flare	Fényvillanás

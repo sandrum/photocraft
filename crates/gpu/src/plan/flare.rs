@@ -1,4 +1,4 @@
-//! Lens Flare fills on the GPU: the flare laid out by `photocraft_compose::lens_flare::prepare`,
+//! Light Flare fills on the GPU: the flare laid out by `photocraft_compose::lens_flare::prepare`,
 //! packed into a pass's LUT rows for `fs_flare` (`flare.wgsl`), which evaluates it per pixel.
 //!
 //! Layout (one flat float array over the rows, index `i` at texel `(i % 4096, i / 4096)`):

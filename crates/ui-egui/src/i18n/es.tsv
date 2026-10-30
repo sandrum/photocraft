@@ -4463,3 +4463,7 @@ navigator	Zoom	Zoom
 	Font size presets	Valores predefinidos de tamaño de fuente
 	Leading presets	Valores predefinidos de interlineado
 	Tracking presets	Valores predefinidos de tracking
+
+# Light Flare fill layers (Layer › New Fill Layer › Light Flare…), distinct from the Lens Flare filter
+	Light Flare…	Destello de luz…
+	Light Flare	Destello de luz

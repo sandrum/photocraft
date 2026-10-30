@@ -1,4 +1,4 @@
-//! Rendering of Lens Flare fill layers ([`photocraft_doc::lens_flare`]).
+//! Rendering of Light Flare fill layers ([`photocraft_doc::lens_flare`]).
 //!
 //! The flare is light added to the image. Each pixel sums its elements' light `L` (RGB, may be
 //! above 1 near the source), spills the excess of a hot channel into the others so cores burn

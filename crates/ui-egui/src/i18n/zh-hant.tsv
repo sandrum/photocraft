@@ -3141,3 +3141,7 @@ curves	Smooth	平滑
 	Font size presets	字體大小預設
 	Leading presets	行距預設
 	Tracking presets	字距調整預設
+
+# Light Flare fill layers (Layer › New Fill Layer › Light Flare…), distinct from the Lens Flare filter
+	Light Flare…	光線耀斑…
+	Light Flare	光線耀斑

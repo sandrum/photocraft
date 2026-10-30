@@ -142,7 +142,7 @@ fn surface_to_scratch(s: &Surface, rect: Rect) -> Buffer {
 pub fn fill_frame(layer: &Layer, canvas: Rect) -> Rect {
     let mut frame = canvas;
     // "Align with layer" off: the canvas (the Gradient tool's live gradients).
-    // A lens flare is placed on the canvas whatever its masks reveal.
+    // A light flare is placed on the canvas whatever its masks reveal.
     if let LayerContent::Fill(Fill::Gradient { align: false, .. } | Fill::LensFlare(_)) = &layer.content {
         return frame;
     }

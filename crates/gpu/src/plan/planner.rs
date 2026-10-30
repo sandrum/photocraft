@@ -725,7 +725,7 @@ impl<'a> Planner<'a> {
             // Pattern fills fall back to the CPU compositor (see `check`).
             Fill::Pattern { .. } => {}
             // Evaluated in their own kernel (`content`); never reaches here.
-            Fill::LensFlare(_) => return Err(Unsupported("lens flare fill outside its own pass".into())),
+            Fill::LensFlare(_) => return Err(Unsupported("light flare fill outside its own pass".into())),
         }
         Ok(())
     }

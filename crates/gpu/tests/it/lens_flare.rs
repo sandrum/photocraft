@@ -1,4 +1,4 @@
-//! Lens Flare fills on the GPU (`fs_flare`) against the CPU renderer
+//! Light Flare fills on the GPU (`fs_flare`) against the CPU renderer
 //! (`photocraft_compose::lens_flare`): every preset and every texture at 8 bits, spot checks at
 //! 16 and 32 bits, masks, blend modes and the paged compositor. Skips when no GPU adapter exists.
 //!
@@ -138,7 +138,7 @@ fn every_preset_matches_the_cpu_at_8_bits() {
         d.check(preset.name, 2.0, 200);
         all.merge(&d);
     }
-    eprintln!("lens flare presets at 8 bits ({}): {}", PRESETS.len(), all.report());
+    eprintln!("light flare presets at 8 bits ({}): {}", PRESETS.len(), all.report());
     all.check("all presets", 2.0, 20);
 }
 
@@ -159,7 +159,7 @@ fn every_texture_matches_the_cpu_at_8_bits() {
         d.check(kind.id(), 2.0, 200);
         all.merge(&d);
     }
-    eprintln!("lens flare textures at 8 bits ({}): {}", TextureKind::ALL.len(), all.report());
+    eprintln!("light flare textures at 8 bits ({}): {}", TextureKind::ALL.len(), all.report());
     all.check("all textures", 2.0, 20);
 }
 
@@ -180,7 +180,7 @@ fn deep_documents_masks_and_large_canvases_match_the_cpu() {
             all.merge(&d);
         }
     }
-    eprintln!("lens flare at 16 and 32 bits: {}", all.report());
+    eprintln!("light flare at 16 and 32 bits: {}", all.report());
 
     // Screened over an image, masked, at a size past the crisp-detail reference.
     let mut d = Document::with_background("big", Size::new(1500, 900), ColorMode::Rgb, SampleType::U8, Color::rgba(0.2, 0.3, 0.4, 1.0));
@@ -198,7 +198,7 @@ fn deep_documents_masks_and_large_canvases_match_the_cpu() {
         d.layers.push(l);
     }
     let big = diff(&mut g, &d, "screened, masked, large");
-    eprintln!("lens flares screened and masked, 1500x900: {}", big.report());
+    eprintln!("light flares screened and masked, 1500x900: {}", big.report());
     big.check("screened, masked, large", 2.0, 20);
 
     // With a layer style: the effects take the flare as their layer.
@@ -207,7 +207,7 @@ fn deep_documents_masks_and_large_canvases_match_the_cpu() {
     let mut d = alone(f, Size::new(400, 240), SampleType::U8);
     d.layers[0].effects.items.push(photocraft_doc::Effect::DropShadow(shadow(BlendMode::Multiply, 0.75, 120.0, 6.0, 8.0, 0.0)));
     let styled = diff(&mut g, &d, "drop shadow");
-    eprintln!("lens flare with a drop shadow: {}", styled.report());
+    eprintln!("light flare with a drop shadow: {}", styled.report());
     styled.check("drop shadow", 2.0, 200);
 }
 

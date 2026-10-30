@@ -1,4 +1,4 @@
-//! The Lens Flare dialog on the image: while it is on top, a click or drag on the free canvas
+//! The Light Flare dialog on the image: while it is on top, a click or drag on the free canvas
 //! (`canvas::handle_dialog_canvas_input`, the control channel's pointer events) places the light
 //! source, as on the dialog's pad, and a crosshair marks the source on the canvas. The canvas
 //! widget is inert under a dialog, so no tool paints or selects meanwhile; Space and the middle
@@ -19,7 +19,7 @@ use super::{num, owns, put, target_is_active};
 use crate::PhotocraftApp;
 use crate::canvas::ViewXform;
 
-/// Is the Lens Flare dialog on top, targeting the active document (so the canvas places its
+/// Is the Light Flare dialog on top, targeting the active document (so the canvas places its
 /// light)?
 pub(crate) fn placing(app: &PhotocraftApp) -> bool {
     app.ui.dialogs.last().is_some_and(|d| owns(&d.fields) && target_is_active(app, &d.fields))

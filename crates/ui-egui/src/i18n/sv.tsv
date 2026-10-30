@@ -4770,3 +4770,7 @@ cameraRaw	Show Vectorscope	Visa vektorskop
 cameraRaw	Tone Histogram	Tonhistogram
 cameraRaw	Vignetting	Vinjettering
 cameraRaw	White Balance: As Shot	Vitbalans: som tagen
+
+# Light Flare fill layers (Layer › New Fill Layer › Light Flare…), distinct from the Lens Flare filter
+	Light Flare…	Ljusreflex…
+	Light Flare	Ljusreflex

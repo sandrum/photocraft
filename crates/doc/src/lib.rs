@@ -370,7 +370,7 @@ pub enum Fill {
         #[serde(default)]
         phase: (f32, f32),
     },
-    /// An editable lens flare (Layer › New Fill Layer › Lens Flare…), rendered as light: its
+    /// An editable light flare (Layer › New Fill Layer › Light Flare…), rendered as light: its
     /// alpha is the light's strength, so it is usually blended with Screen.
     LensFlare(Box<lens_flare::LensFlare>),
 }

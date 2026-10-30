@@ -3721,3 +3721,7 @@ curves	Smooth	매끄럽게
 	Font size presets	글꼴 크기 사전 설정
 	Leading presets	행간 사전 설정
 	Tracking presets	자간 사전 설정
+
+# Light Flare fill layers (Layer › New Fill Layer › Light Flare…), distinct from the Lens Flare filter
+	Light Flare…	라이트 플레어…
+	Light Flare	라이트 플레어

@@ -4573,3 +4573,7 @@ shape	Appearance	Izgled
 	Font size presets	Unapred podešene veličine fonta
 	Leading presets	Unapred podešeni proredi
 	Tracking presets	Unapred podešeni razmaci slova
+
+# Light Flare fill layers (Layer › New Fill Layer › Light Flare…), distinct from the Lens Flare filter
+	Light Flare…	Svetlosni odsjaj…
+	Light Flare	Svetlosni odsjaj

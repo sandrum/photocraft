@@ -38,7 +38,7 @@ fn new_lens_flare_opens_the_dialog_previews_and_ok_is_one_step() {
     let dialog = crate::menus::invoke(&mut app, &ctx, cmds::CREATE, json!({})).unwrap()["dialog"].as_u64().unwrap();
     let d = app.ui.dialogs.last().unwrap();
     assert!(owns(&d.fields));
-    assert_eq!(crate::dialogs::title(d), "Lens Flare");
+    assert_eq!(crate::dialogs::title(d), "Light Flare");
     assert_eq!(d.fields["preset"], json!(cmds::DEFAULT_PRESET));
     assert!(Arc::ptr_eq(&before, &app.session.active().unwrap().doc), "no layer until OK");
     set(&mut app, dialog, json!({"preset": "Sun Burst", "x": 0.8, "y": 0.2, "scale": 1.5, "hue": 30.0, "tint": 0.4, "texture": "dust"}));
@@ -127,7 +127,7 @@ fn the_dialog_draws_and_a_thumbnail_click_picks_the_preset() {
     assert!(matches!(&st.doc.layer(st.active_layer.unwrap()).unwrap().content, LayerContent::Fill(Fill::LensFlare(f)) if f.preset == "Orbital"));
 }
 
-/// A 400×300 document filling a canvas round the open Lens Flare dialog, with the Brush tool.
+/// A 400×300 document filling a canvas round the open Light Flare dialog, with the Brush tool.
 fn canvas_harness() -> Harness<'static, PhotocraftApp> {
     let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
     app.run("file.new", json!({"width": 400, "height": 300})).unwrap();

@@ -659,7 +659,7 @@ fn handle_dialog_canvas_input(app: &mut PhotocraftApp, input: DialogCanvasInput<
         input.primary && app.ui.dialogs.last().is_some_and(|d| crate::select_mask_view::owns(&d.fields) && crate::select_mask_view::brush_on(&d.fields));
     // Field Blur's pins are placed and dragged on the image (`blur_pins`).
     let pinning = input.primary && app.ui.dialogs.last().is_some_and(|d| crate::blur_pins::owns(&d.fields));
-    // The Lens Flare dialog's light source is placed by a click or drag on the image.
+    // The Light Flare dialog's light source is placed by a click or drag on the image.
     let flare_placing = input.primary && crate::lens_flare_ui::placing(app);
     // Layer Style on a Drop or Inner Shadow page: a drag on the image moves the shadow (#5701).
     let shadow_drag =

@@ -74,7 +74,7 @@ pub(super) fn purge(s: &mut Session, what: &str) -> Result<Value> {
         let flares = photocraft_compose::lens_flare::purge_cache();
         if flares > 0 {
             freed = freed.saturating_add(flares);
-            items.push("lens flare cache");
+            items.push("light flare cache");
         }
     }
     s.edit_state.fade = None;

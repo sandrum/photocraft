@@ -1,4 +1,4 @@
-//! Lens Flare fill layers (Layer › New Fill Layer › Lens Flare…): an editable flare from the
+//! Light Flare fill layers (Layer › New Fill Layer › Light Flare…): an editable flare from the
 //! preset library (anamorphic, spherical, sun flares, streaks) that stays adjustable until the
 //! image is final. Creating one and editing one are each one undoable step; the flare is a fill
 //! layer, so its masks, opacity, blend mode (Screen by default) and stacking work as for any
@@ -12,14 +12,14 @@ use serde_json::{Value, json};
 use crate::commands::{CommandSpec, check_pixels_unlocked, layer_param};
 use crate::{EngineError, Result, Session};
 
-/// Layer › New Fill Layer › Lens Flare….
-pub const CREATE: &str = "layer.newFillLayer.lensFlare";
-/// Edit a Lens Flare fill layer (its dialog's OK).
-pub const SET: &str = "layer.fill.lensFlare.set";
+/// Layer › New Fill Layer › Light Flare….
+pub const CREATE: &str = "layer.newFillLayer.lightFlare";
+/// Edit a Light Flare fill layer (its dialog's OK).
+pub const SET: &str = "layer.fill.lightFlare.set";
 /// The preset library.
-pub const PRESETS: &str = "layer.fill.lensFlare.presets";
-/// Give a Lens Flare layer a look (the dialog's Filters tab).
-pub const LOOK: &str = "layer.fill.lensFlare.look";
+pub const PRESETS: &str = "layer.fill.lightFlare.presets";
+/// Give a Light Flare layer a look (the dialog's Filters tab).
+pub const LOOK: &str = "layer.fill.lightFlare.look";
 /// The preset a new flare starts from.
 pub const DEFAULT_PRESET: &str = "Blue Horizon";
 
@@ -35,7 +35,7 @@ pub fn edited(cmd: &str, base: &LensFlare, p: &Value) -> Result<LensFlare> {
     let mut f = base.clone();
     if let Some(v) = p.get("preset").filter(|v| !v.is_null()) {
         let name = v.as_str().unwrap_or_default();
-        let pr = lens_flare::preset(name).ok_or_else(|| bad(cmd, format!("no lens flare preset \"{name}\" (see {PRESETS})")))?;
+        let pr = lens_flare::preset(name).ok_or_else(|| bad(cmd, format!("no light flare preset \"{name}\" (see {PRESETS})")))?;
         f.category = pr.category;
         f.preset = pr.name.into();
         f.elements = pr.elements();
@@ -121,7 +121,7 @@ fn new_flare(p: &Value) -> Result<LensFlare> {
         None | Some(Value::Null) => DEFAULT_PRESET,
         Some(v) => v.as_str().ok_or_else(|| bad(CREATE, "`preset` is a preset name"))?,
     };
-    let base = lens_flare::preset(name).ok_or_else(|| bad(CREATE, format!("no lens flare preset \"{name}\" (see {PRESETS})")))?.flare();
+    let base = lens_flare::preset(name).ok_or_else(|| bad(CREATE, format!("no light flare preset \"{name}\" (see {PRESETS})")))?.flare();
     edited(CREATE, &base, p)
 }
 
@@ -136,7 +136,7 @@ fn blend_param(cmd: &str, p: &Value) -> Result<BlendMode> {
     }
 }
 
-/// Insert a new Lens Flare layer into `doc` above `active` (the CREATE edit, shared with the
+/// Insert a new Light Flare layer into `doc` above `active` (the CREATE edit, shared with the
 /// dialog's preview).
 fn insert(doc: &mut Document, active: &mut Option<LayerId>, p: &Value, default_mask: bool) -> Result<LayerId> {
     if !p.is_object() {
@@ -145,7 +145,7 @@ fn insert(doc: &mut Document, active: &mut Option<LayerId>, p: &Value, default_m
     let flare = new_flare(p)?;
     let blend = blend_param(CREATE, p)?;
     let look = looks::param(CREATE, p)?;
-    let mut l = Layer::new(doc.next_layer_name("Lens Flare"), LayerContent::Fill(Fill::LensFlare(Box::new(flare))));
+    let mut l = Layer::new(doc.next_layer_name("Light Flare"), LayerContent::Fill(Fill::LensFlare(Box::new(flare))));
     l.blend = blend;
     crate::commands::mask_new_layer(doc, &mut l, p, CREATE, default_mask)?;
     let id = crate::layer_place::insert_new(doc, *active, l, crate::layer_place::Place::Auto);
@@ -164,7 +164,7 @@ pub fn look_of(doc: &Document, id: LayerId) -> String {
 fn create(s: &mut Session, p: &Value) -> Result<Value> {
     let p = if p.is_null() { json!({}) } else { p.clone() };
     let default_mask = crate::commands::layer_panel_option(s, "useDefaultMasksOnFillLayers", true);
-    let id = s.edit("New Lens Flare Layer", |doc, active| insert(doc, active, &p, default_mask))?;
+    let id = s.edit("New Light Flare Layer", |doc, active| insert(doc, active, &p, default_mask))?;
     let st = s.active().ok_or(EngineError::NoDocument)?;
     let flare = match st.doc.layer(id).map(|l| &l.content) {
         Some(LayerContent::Fill(Fill::LensFlare(f))) => params_of(f),
@@ -186,7 +186,7 @@ fn target(s: &Session, p: &Value) -> Result<(LayerId, LensFlare, LensFlare)> {
     }
     let id = layer_param(s, p)?;
     let layer = st.doc.layer(id).ok_or(EngineError::NoLayer(id))?;
-    let LayerContent::Fill(Fill::LensFlare(original)) = &layer.content else { return Err(bad(SET, "the target must be a Lens Flare layer")) };
+    let LayerContent::Fill(Fill::LensFlare(original)) = &layer.content else { return Err(bad(SET, "the target must be a Light Flare layer")) };
     let flare = edited(SET, original, p)?;
     Ok((id, (**original).clone(), flare))
 }
@@ -205,7 +205,7 @@ fn set(s: &mut Session, p: &Value) -> Result<Value> {
         check_pixels_unlocked(&st.doc, id)?;
     }
     if flare != original || blend_changes || look_changes {
-        s.edit("Lens Flare", |doc, _| {
+        s.edit("Light Flare", |doc, _| {
             let l = doc.layer_mut(id).ok_or(EngineError::NoLayer(id))?;
             l.content = LayerContent::Fill(Fill::LensFlare(Box::new(flare.clone())));
             if let Some(b) = blend {
@@ -221,7 +221,7 @@ fn set(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(json!({"layer": id.0, "flare": params_of(&flare), "look": look_of(&st.doc, id)}))
 }
 
-/// A look for a Lens Flare layer: replaces its look group (or removes it with "none"), one step.
+/// A look for a Light Flare layer: replaces its look group (or removes it with "none"), one step.
 fn set_look(s: &mut Session, p: &Value) -> Result<Value> {
     let look = looks::param(LOOK, p)?.ok_or_else(|| bad(LOOK, "`look` is required (\"none\" removes the look)"))?;
     let (id, _, _) = target(s, p).map_err(|e| match e {
@@ -257,7 +257,7 @@ fn presets(_: &mut Session, p: &Value) -> Result<Value> {
 }
 
 /// The active document as [`SET`] or [`CREATE`] with `p` would leave it, without a history
-/// step: the Lens Flare dialog's live preview, so it shows exactly what OK commits.
+/// step: the Light Flare dialog's live preview, so it shows exactly what OK commits.
 pub fn preview(s: &Session, cmd: &str, p: &Value) -> Result<Document> {
     let st = s.active().ok_or(EngineError::NoDocument)?;
     let mut doc = (*st.doc).clone();
@@ -278,19 +278,19 @@ pub fn preview(s: &Session, cmd: &str, p: &Value) -> Result<Document> {
             let default_mask = crate::commands::layer_panel_option(s, "useDefaultMasksOnFillLayers", true);
             insert(&mut doc, &mut active, p, default_mask)?;
         }
-        other => return Err(bad(other, "no Lens Flare preview for this command")),
+        other => return Err(bad(other, "no Light Flare preview for this command")),
     }
     Ok(doc)
 }
 
-const CREATE_PARAMS: &str = r##"{"preset":name="Blue Horizon","x":-1..2?,"y":-1..2? (light source as a fraction of the canvas),"scale":0.1..5?,"brightness":0..3?,"aspect":0.25..4?,"source":0..3? (glow/streak strength),"artifacts":0..3? (ghost strength),"rotation":-180..180?,"hue":0..360?,"tint":0..1? (colour wheel),"texture":"none|filmGrain|coarseGrain|fineGrain|dust|stretchedSpecks|softOrbs|bigSpots|hexDust|bokehBubbles|raindrops|scratches|smudge|hazyGlass|glassArcs|brushedSteel"?,"textureOpacity":0..1?,"flipX":bool?,"flipY":bool?,"blend":mode name="screen","look":look id="none" (a colour grade above the flare: adjustment layers in a "… Look" group; see layer.fill.lensFlare.presets),"path":"work"|saved path name|{…path}? (the active path: becomes the vector mask; else the selection is the layer mask)} → {layer, flare, look}"##;
-const SET_PARAMS: &str = r##"{"layer":id|name? (default active; a Lens Flare layer),"document":id? (reject a stale dialog),"preset":name? (replaces the elements, keeps the controls),"x","y","scale","brightness","aspect","source","artifacts","rotation","hue","tint","texture","textureOpacity","flipX","flipY","blend","look" as for layer.newFillLayer.lensFlare; omitted values keep the layer's} → {layer, flare, look}"##;
+const CREATE_PARAMS: &str = r##"{"preset":name="Blue Horizon","x":-1..2?,"y":-1..2? (light source as a fraction of the canvas),"scale":0.1..5?,"brightness":0..3?,"aspect":0.25..4?,"source":0..3? (glow/streak strength),"artifacts":0..3? (ghost strength),"rotation":-180..180?,"hue":0..360?,"tint":0..1? (colour wheel),"texture":"none|filmGrain|coarseGrain|fineGrain|dust|stretchedSpecks|softOrbs|bigSpots|hexDust|bokehBubbles|raindrops|scratches|smudge|hazyGlass|glassArcs|brushedSteel"?,"textureOpacity":0..1?,"flipX":bool?,"flipY":bool?,"blend":mode name="screen","look":look id="none" (a colour grade above the flare: adjustment layers in a "… Look" group; see layer.fill.lightFlare.presets),"path":"work"|saved path name|{…path}? (the active path: becomes the vector mask; else the selection is the layer mask)} → {layer, flare, look}"##;
+const SET_PARAMS: &str = r##"{"layer":id|name? (default active; a Light Flare layer),"document":id? (reject a stale dialog),"preset":name? (replaces the elements, keeps the controls),"x","y","scale","brightness","aspect","source","artifacts","rotation","hue","tint","texture","textureOpacity","flipX","flipY","blend","look" as for layer.newFillLayer.lightFlare; omitted values keep the layer's} → {layer, flare, look}"##;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         CommandSpec {
             id: CREATE,
-            label: "Lens Flare…",
+            label: "Light Flare…",
             menu: &["Layer", "New Fill Layer"],
             shortcut: None,
             params: CREATE_PARAMS,
@@ -300,7 +300,7 @@ pub fn specs() -> Vec<CommandSpec> {
         },
         CommandSpec {
             id: SET,
-            label: "Lens Flare…",
+            label: "Light Flare…",
             menu: &[],
             shortcut: None,
             params: SET_PARAMS,
@@ -310,7 +310,7 @@ pub fn specs() -> Vec<CommandSpec> {
         },
         CommandSpec {
             id: PRESETS,
-            label: "Lens Flare Presets",
+            label: "Light Flare Presets",
             menu: &[],
             shortcut: None,
             params: r##"{"category":"anamorphic|spherical|sunFlare|streak"?} → {categories:[{category,label,presets:[name]}],textures:[id],looks:[{id,name}]}"##,
@@ -320,10 +320,10 @@ pub fn specs() -> Vec<CommandSpec> {
         },
         CommandSpec {
             id: LOOK,
-            label: "Lens Flare Look",
+            label: "Light Flare Look",
             menu: &[],
             shortcut: None,
-            params: r##"{"layer":id|name? (default active; a Lens Flare layer),"document":id? (reject a stale dialog),"look":"none|goldenHour|blueHour|tealAmber|silverBleach|fadedPrint|moonlight|oldSepia|punch|vivid|noir|crossLab" (adjustment layers in a pass-through "… Look" group directly above the flare; a new look replaces the old, "none" removes it)} → {layer, look, group}"##,
+            params: r##"{"layer":id|name? (default active; a Light Flare layer),"document":id? (reject a stale dialog),"look":"none|goldenHour|blueHour|tealAmber|silverBleach|fadedPrint|moonlight|oldSepia|punch|vivid|noir|crossLab" (adjustment layers in a pass-through "… Look" group directly above the flare; a new look replaces the old, "none" removes it)} → {layer, look, group}"##,
             enabled: |s| s.active().map(|_| ()).ok_or_else(|| "no document open".into()),
             run: set_look,
             journal: true,

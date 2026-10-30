@@ -1155,7 +1155,7 @@ fn pointer_event_intercepted(app: &mut PhotocraftApp, ctx: &egui::Context, g: &P
     pointer_eyedropper_took(app, ctx, g, s) || color_range_took(app, g, s) || lens_flare_took(app, g, s) || (g.secondary && secondary_menu_took(app, ctx, g, s))
 }
 
-/// The Lens Flare dialog places its light where the primary button presses or drags (document
+/// The Light Flare dialog places its light where the primary button presses or drags (document
 /// coordinates), and owns every pointer event meanwhile: no tool runs under it.
 fn lens_flare_took(app: &mut PhotocraftApp, g: &PointerGesture, s: &PointerSample) -> bool {
     if !crate::lens_flare_ui::placing(app) {

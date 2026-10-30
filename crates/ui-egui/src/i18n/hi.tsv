@@ -580,3 +580,7 @@ cameraRaw	Yellow	पीला
 	Target	लक्ष्य
 	Units	इकाइयाँ
 	Demosaic	डिमोज़ेक
+
+# Light Flare fill layers (Layer › New Fill Layer › Light Flare…), distinct from the Lens Flare filter
+	Light Flare…	प्रकाश चमक…
+	Light Flare	प्रकाश चमक

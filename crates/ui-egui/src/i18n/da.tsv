@@ -4772,3 +4772,7 @@ cameraRaw	Show Vectorscope	Vis vektorskop
 cameraRaw	Tone Histogram	Tonehistogram
 cameraRaw	Vignetting	Vignettering
 cameraRaw	White Balance: As Shot	Hvidbalance: Som fotograferet
+
+# Light Flare fill layers (Layer › New Fill Layer › Light Flare…), distinct from the Lens Flare filter
+	Light Flare…	Lysblænding…
+	Light Flare	Lysblænding

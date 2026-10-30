@@ -1,7 +1,7 @@
 
-// ---- Lens flare fills (photocraft_compose::lens_flare) --------------------------------------
+// ---- Light flare fills (photocraft_compose::lens_flare) --------------------------------------
 //
-// Appended to compose.wgsl (same bindings). `fs_flare` evaluates a Lens Flare fill per pixel,
+// Appended to compose.wgsl (same bindings). `fs_flare` evaluates a Light Flare fill per pixel,
 // operation for operation like `lens_flare::render_quantized`. The flare is laid out on the CPU
 // (`lens_flare::prepare`: positions, sizes, colours, per-element constants, each ray's angle,
 // length and strength) and packed into `lut_tex` as a flat float array by `plan/flare.rs`, whose
@@ -489,7 +489,7 @@ fn lf_pixel(d: vec2<i32>) -> vec4<f32> {
     return vec4(min(l / a, vec3(1.0)), a);
 }
 
-// A Lens Flare fill layer's pixels, times its mask.
+// A Light Flare fill layer's pixels, times its mask.
 @fragment
 fn fs_flare(in: VOut) -> @location(0) vec4<f32> {
     let d = doc_px(local(in.pos));

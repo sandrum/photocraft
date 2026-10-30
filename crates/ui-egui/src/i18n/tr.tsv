@@ -4229,3 +4229,7 @@ cameraData	Lens	Lens
 	Font size presets	Yazı tipi boyutu hazır ayarları
 	Leading presets	Satır aralığı hazır ayarları
 	Tracking presets	İzleme hazır ayarları
+
+# Light Flare fill layers (Layer › New Fill Layer › Light Flare…), distinct from the Lens Flare filter
+	Light Flare…	Işık Parlaması…
+	Light Flare	Işık Parlaması

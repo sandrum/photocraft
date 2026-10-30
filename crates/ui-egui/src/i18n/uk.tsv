@@ -4215,3 +4215,7 @@ curves	Smooth	Згладити
 	Font size presets	Набори розмірів шрифту
 	Leading presets	Набори інтерліньяжу
 	Tracking presets	Набори трекінгу
+
+# Light Flare fill layers (Layer › New Fill Layer › Light Flare…), distinct from the Lens Flare filter
+	Light Flare…	Світловий відблиск…
+	Light Flare	Світловий відблиск

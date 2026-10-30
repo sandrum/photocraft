@@ -31,7 +31,7 @@ fn new_flare_layer_lights_the_image_and_undoes_in_one_step() {
         let st = s.active().unwrap();
         let l = st.doc.layer(LayerId(id)).unwrap();
         assert_eq!(l.blend, BlendMode::Screen);
-        assert!(l.name.starts_with("Lens Flare"));
+        assert!(l.name.starts_with("Light Flare"));
         assert_eq!(st.history.entries().len(), count + 1);
         let lit = pixel(&s, 20, 11);
         assert!(lit[0] > before[0] + 0.3, "{depth}-bit: {before:?} → {lit:?}");
@@ -85,7 +85,7 @@ fn flare_survives_a_pcraft_round_trip() {
     let doc = s.active().unwrap().doc.clone();
     let bytes = photocraft_format::save_to_bytes(&doc, &Default::default()).unwrap();
     let back = photocraft_format::load_from_bytes(&bytes).unwrap();
-    let flare = |d: &Document| match &d.layers.iter().find(|l| l.name.starts_with("Lens Flare")).unwrap().content {
+    let flare = |d: &Document| match &d.layers.iter().find(|l| l.name.starts_with("Light Flare")).unwrap().content {
         LayerContent::Fill(Fill::LensFlare(f)) => (**f).clone(),
         _ => panic!("lost the flare"),
     };
@@ -137,7 +137,7 @@ fn psd_export_writes_the_flare_as_pixels() {
     s.execute(CREATE, json!({"preset": "Sun Glint", "x": 0.5, "y": 0.5})).unwrap();
     let doc = s.active().unwrap().doc.clone();
     let out = photocraft_io::export(&doc, "x.psd", &Default::default()).unwrap();
-    assert!(out.warnings.iter().any(|w| w.contains("lens flare")), "{:?}", out.warnings);
+    assert!(out.warnings.iter().any(|w| w.contains("light flare")), "{:?}", out.warnings);
     let back = photocraft_io::import("x.psd", &out.bytes).unwrap().document;
     let all = Rect::new(0, 0, 80, 45);
     let (a, b) = (photocraft_compose::render(&doc, all).px, photocraft_compose::render(&back, all).px);

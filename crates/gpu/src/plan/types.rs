@@ -6,7 +6,7 @@ pub enum Kernel {
     /// Transparent fill (no draw).
     Clear,
     Content,
-    /// A Lens Flare fill evaluated per pixel (`flare.wgsl`), times the layer's mask.
+    /// A Light Flare fill evaluated per pixel (`flare.wgsl`), times the layer's mask.
     Flare,
     Mask,
     Blend,

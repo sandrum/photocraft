@@ -1,10 +1,10 @@
-//! The Lens Flare dialog: Layer › New Fill Layer › Lens Flare… and double-clicking a Lens Flare
+//! The Light Flare dialog: Layer › New Fill Layer › Light Flare… and double-clicking a Light Flare
 //! layer's thumbnail open it. A preset library in four tabs (Anamorphic, Spherical, Sun Flares,
 //! Streaks) with rendered thumbnails, a position pad for the light source, the flare's controls
 //! (Scale, Brightness, Aspect, Source, Artifacts, Rotation), a colour wheel (Hue and Tint) and a
 //! lens-dirt Texture with its Opacity and Flip X / Flip Y, previewed live on the canvas from a
-//! document snapshot. OK runs one engine command (`layer.newFillLayer.lensFlare` for a new layer,
-//! `layer.fill.lensFlare.set` for an existing one), so it is one History step; Cancel changes
+//! document snapshot. OK runs one engine command (`layer.newFillLayer.lightFlare` for a new layer,
+//! `layer.fill.lightFlare.set` for an existing one), so it is one History step; Cancel changes
 //! nothing. The layer stays a flare: reopen it to change anything until the image is final.
 //! The fields are the command's params, so `ui.dialog.set` / `ui.dialog.confirm` drive it.
 //!
@@ -29,7 +29,7 @@ use crate::theme::Tokens;
 mod canvas;
 pub(crate) use canvas::{draw_handle, place_at, placing};
 
-const MARK: &str = "__lensFlare";
+const MARK: &str = "__lightFlare";
 /// The fields that are command params (besides the target in `__params`).
 const KEYS: [&str; 16] = [
     "preset",
@@ -66,7 +66,7 @@ pub(crate) struct Preview {
     key: u64,
 }
 
-/// Is this dialog the Lens Flare dialog?
+/// Is this dialog the Light Flare dialog?
 pub(crate) fn owns(f: &Map<String, Value>) -> bool {
     f.contains_key(MARK)
 }
@@ -75,7 +75,7 @@ fn fields(command: &str, target: Value, values: Value) -> Map<String, Value> {
     let mut f = Map::new();
     f.insert(MARK.into(), json!(true));
     f.insert("__command".into(), json!(command));
-    f.insert("__label".into(), json!("Lens Flare"));
+    f.insert("__label".into(), json!("Light Flare"));
     f.insert("__params".into(), target);
     f.insert("__tab".into(), values.get("category").cloned().unwrap_or(json!("anamorphic")));
     for k in KEYS {
@@ -87,7 +87,7 @@ fn fields(command: &str, target: Value, values: Value) -> Map<String, Value> {
     f
 }
 
-/// Edit the active Lens Flare layer (its thumbnail, Layer › Layer Content Options…).
+/// Edit the active Light Flare layer (its thumbnail, Layer › Layer Content Options…).
 pub(crate) fn open(app: &mut PhotocraftApp) -> Option<u64> {
     let st = app.session.active()?;
     let layer = st.active_layer?;
@@ -98,14 +98,14 @@ pub(crate) fn open(app: &mut PhotocraftApp) -> Option<u64> {
     Some(app.ui.open_dialog(crate::state::DialogKind::Command, f))
 }
 
-/// Layer › New Fill Layer › Lens Flare…: the dialog in front of creating the layer, starting from
+/// Layer › New Fill Layer › Light Flare…: the dialog in front of creating the layer, starting from
 /// the default preset with its light in the upper left third.
 pub(crate) fn open_new(app: &mut PhotocraftApp) -> Result<u64, String> {
     if let Some(Err(why)) = photocraft_engine::commands::find(cmds::CREATE).map(|c| (c.enabled)(&app.session)) {
         return Err(why);
     }
     let st = app.session.active().ok_or("no document open")?;
-    let flare = lens_flare::preset(cmds::DEFAULT_PRESET).ok_or("no lens flare presets")?.flare();
+    let flare = lens_flare::preset(cmds::DEFAULT_PRESET).ok_or("no light flare presets")?.flare();
     let mut values = cmds::params_of(&flare);
     values["look"] = json!(looks::NONE);
     let f = fields(cmds::CREATE, json!({"document": st.doc.id.0}), values);
@@ -157,7 +157,7 @@ pub(crate) fn confirm(app: &mut PhotocraftApp, f: &Map<String, Value>) -> Result
     if unchanged(f) {
         return Ok(json!({"unchanged": true}));
     }
-    let (cmd, params) = command(app, f).ok_or("invalid Lens Flare dialog")?;
+    let (cmd, params) = command(app, f).ok_or("invalid Light Flare dialog")?;
     app.run(cmd, params)
 }
 
@@ -366,7 +366,7 @@ fn control(ui: &mut egui::Ui, f: &mut Map<String, Value>, (label, k, r, default,
     }
 }
 
-/// The dialog body, in LensFlare-studio order: Effects (the library), then Edit (position and
+/// The dialog body, in order: Effects (the library), then Edit (position and
 /// controls), Color and Textures side by side.
 pub(crate) fn body(app: &PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Value>) {
     ui.spacing_mut().item_spacing.y = 6.0;

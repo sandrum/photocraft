@@ -4704,3 +4704,7 @@ shape	Appearance	Оформление
 	Font size presets	Наборы размеров шрифта
 	Leading presets	Наборы интерлиньяжа
 	Tracking presets	Наборы трекинга
+
+# Light Flare fill layers (Layer › New Fill Layer › Light Flare…), distinct from the Lens Flare filter
+	Light Flare…	Световой блик…
+	Light Flare	Световой блик

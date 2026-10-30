@@ -3550,3 +3550,7 @@ curves	Smooth	تنعيم
 	Update and Restart	التحديث وإعادة التشغيل
 	X	X
 	Y	Y
+
+# Light Flare fill layers (Layer › New Fill Layer › Light Flare…), distinct from the Lens Flare filter
+	Light Flare…	وهج ضوئي…
+	Light Flare	وهج ضوئي

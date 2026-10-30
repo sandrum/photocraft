@@ -4122,3 +4122,7 @@ curves	Smooth	Wygładź
 	Font size presets	Ustawienia wstępne rozmiaru czcionki
 	Leading presets	Ustawienia wstępne interlinii
 	Tracking presets	Ustawienia wstępne światła
+
+# Light Flare fill layers (Layer › New Fill Layer › Light Flare…), distinct from the Lens Flare filter
+	Light Flare…	Rozbłysk światła…
+	Light Flare	Rozbłysk światła

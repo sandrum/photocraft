@@ -413,7 +413,7 @@ pub(crate) fn invoke_unguarded(app: &mut PhotocraftApp, ctx: &egui::Context, id:
         photocraft_engine::pattern_fill_cmds::CREATE if params.as_object().is_none_or(|o| o.is_empty()) => {
             Ok(json!({"dialog": crate::pattern_fill_ui::open_new(app)?}))
         }
-        // Layer › New Fill Layer › Lens Flare… from the menu: the Lens Flare dialog (with params:
+        // Layer › New Fill Layer › Light Flare… from the menu: the Light Flare dialog (with params:
         // the engine directly).
         photocraft_engine::lens_flare_cmds::CREATE if params.as_object().is_none_or(|o| o.is_empty()) => {
             Ok(json!({"dialog": crate::lens_flare_ui::open_new(app)?}))

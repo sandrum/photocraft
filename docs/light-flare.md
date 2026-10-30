@@ -1,6 +1,6 @@
-# Lens Flare layers
+# Light Flare layers
 
-Layer › New Fill Layer › **Lens Flare…** adds an editable flare: a fill layer whose content is a
+Layer › New Fill Layer › **Light Flare…** adds an editable flare: a fill layer whose content is a
 `Fill::LensFlare` (`crates/doc/src/lens_flare.rs`), rendered by the compositor
 (`crates/compose/src/lens_flare.rs`). Unlike Filter › Render › Lens Flare, which paints into a
 pixel layer once, the flare stays a description you can reopen and change until the image is
@@ -57,7 +57,7 @@ Punch, Vivid, Noir and Cross Lab. A look is ordinary adjustment layers (Curves, 
 Color Balance, Photo Filter, Vibrance, Brightness/Contrast, Black & White) in a collapsed
 pass-through group named "<Look> Look", directly above the flare and the layers clipped to it, so
 it stays editable and its opacity sets its strength. The group carries an XMP tag
-(`urn:photocraft:lens-flare:1`, look id and flare layer id), so picking another look replaces it
+(`urn:photocraft:light-flare:1`, look id and flare layer id), so picking another look replaces it
 and None removes it instead of stacking. OK commits the flare and its look as one History step.
 
 ## How it composites
@@ -82,12 +82,12 @@ Iris Xe a 27 MP render costs about 80 ms per flare on the GPU, against 0.3–1 s
 
 ## Commands
 
-- `layer.newFillLayer.lensFlare` `{preset, x, y, scale, brightness, aspect, source, artifacts,
+- `layer.newFillLayer.lightFlare` `{preset, x, y, scale, brightness, aspect, source, artifacts,
   rotation, hue, tint, texture, textureOpacity, flipX, flipY, blend, look, path}`
-- `layer.fill.lensFlare.set` `{layer, …the same}`: omitted values keep the layer's.
-- `layer.fill.lensFlare.look` `{layer?, document?, look}`: replace the flare's look (`"none"`
+- `layer.fill.lightFlare.set` `{layer, …the same}`: omitted values keep the layer's.
+- `layer.fill.lightFlare.look` `{layer?, document?, look}`: replace the flare's look (`"none"`
   removes it), one History step → `{layer, look, group}`.
-- `layer.fill.lensFlare.presets` `{category?}`: the library (presets, textures, looks), for agents.
+- `layer.fill.lightFlare.presets` `{category?}`: the library (presets, textures, looks), for agents.
 
 ## Previewing presets
 

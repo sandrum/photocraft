@@ -334,7 +334,7 @@ pub fn mode_index(m: BlendMode) -> i32 {
 }
 
 /// Whether `Planner::content` draws `layer` as one `Planner::content_pass`: not a group's stack,
-/// an adjustment, a pattern fill painted in passes or a lens flare evaluated in its own kernel.
+/// an adjustment, a pattern fill painted in passes or a light flare evaluated in its own kernel.
 pub(super) fn single_content_pass(layer: &Layer) -> bool {
     match &layer.content {
         LayerContent::Group(_) | LayerContent::Adjustment(_) => false,

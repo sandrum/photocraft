@@ -73,7 +73,7 @@ fn native_cmyk_fills_fall_back_only_without_a_valid_cache() {
     }
 }
 
-/// A Lens Flare fill is evaluated in its own pass (`Kernel::Flare`) with the flare packed in its
+/// A Light Flare fill is evaluated in its own pass (`Kernel::Flare`) with the flare packed in its
 /// LUT, in a pass of its own or as clipping base, masked or in a group, at every depth; a CMYK
 /// document still composites it on the CPU, and a valid fill cache is drawn from its pixels.
 #[test]
@@ -85,7 +85,7 @@ fn lens_flares_plan_a_flare_pass_except_in_cmyk() {
     for depth in photocraft_color::SampleType::ALL {
         let mut doc = Document::new("flare", Size::new(16, 9), ColorMode::Rgb, depth);
         doc.layers.push(Layer::raster("bg", doc.pixel_format()));
-        let mut flare = Layer::new("Lens Flare", LayerContent::Fill(fill.clone()));
+        let mut flare = Layer::new("Light Flare", LayerContent::Fill(fill.clone()));
         flare.blend = photocraft_color::BlendMode::Screen;
         doc.layers.push(flare.clone());
         assert_eq!(flares(&plan(&doc).unwrap()), 1);

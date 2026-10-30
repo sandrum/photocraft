@@ -4261,3 +4261,7 @@ curves	Smooth	Vloeiend maken
 	Font size presets	Voorinstellingen lettergrootte
 	Leading presets	Voorinstellingen interlinie
 	Tracking presets	Voorinstellingen spatiëring
+
+# Light Flare fill layers (Layer › New Fill Layer › Light Flare…), distinct from the Lens Flare filter
+	Light Flare…	Lichtschittering…
+	Light Flare	Lichtschittering

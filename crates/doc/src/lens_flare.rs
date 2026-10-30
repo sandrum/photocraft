@@ -1,4 +1,4 @@
-//! Lens Flare fill layers: an editable, non-destructive flare built from optical elements.
+//! Light Flare fill layers: an editable, non-destructive flare built from optical elements.
 //!
 //! A flare is data: its light source position, the global controls a user adjusts until the
 //! image is final (scale, brightness, aspect, source and artifact strength, rotation, colour) and
@@ -252,7 +252,7 @@ pub mod range {
     pub const MAX_RAYS: u32 = 256;
 }
 
-/// A lens flare fill: the preset it came from, the user's controls and its elements.
+/// A light flare fill: the preset it came from, the user's controls and its elements.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LensFlare {
