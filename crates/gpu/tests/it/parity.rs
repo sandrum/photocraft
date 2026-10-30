@@ -14,13 +14,13 @@ const TOL: f32 = 1.0 / 255.0 + 4.0 * f32::EPSILON;
 
 use crate::GPU_LOCK;
 
-struct Gpu {
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    comp: Compositor,
+pub(crate) struct Gpu {
+    pub(crate) device: wgpu::Device,
+    pub(crate) queue: wgpu::Queue,
+    pub(crate) comp: Compositor,
     /// The same device with a simulated texture limit of [`PAGED_LIMIT`]: every check also runs
     /// through layer pages and per-cell effect maps.
-    paged: Compositor,
+    pub(crate) paged: Compositor,
     _lock: std::sync::MutexGuard<'static, ()>,
 }
 
@@ -98,7 +98,7 @@ fn timed<T>(what: &str, run: impl FnOnce() -> T) -> T {
 /// `WGPU_BACKEND=dx12 WGPU_DX12_COMPILER=fxc` tests D3D12 with FXC, the app's default on Windows,
 /// where the default adapter may be Vulkan. A backend asked for that can't run the tests fails
 /// them rather than skipping.
-fn gpu() -> Option<Gpu> {
+pub(crate) fn gpu() -> Option<Gpu> {
     let lock = GPU_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     let required = std::env::var_os("WGPU_BACKEND").is_some();
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
@@ -1494,7 +1494,7 @@ fn contour() -> Contour {
     }
 }
 
-fn shadow(blend: BlendMode, opacity: f32, angle: f32, distance: f32, size: f32, spread: f32) -> Shadow {
+pub(crate) fn shadow(blend: BlendMode, opacity: f32, angle: f32, distance: f32, size: f32, spread: f32) -> Shadow {
     Shadow {
         common: FxCommon::new(blend, opacity),
         color: Color::rgb(0.1, 0.05, 0.3),

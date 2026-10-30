@@ -1,6 +1,6 @@
 use super::batch::{batch_runs, run_starts, submit_batch, tile_grid};
 use super::consts::{FLUSH_BYTES, FLUSH_OPS, FLUSH_WORK, PATTERN_IDLE_FRAMES};
-use super::convert::lut_texture;
+use super::convert::lut_texture_as;
 use super::kit::FrameRes;
 use super::paging::{OVER_BUDGET, cell_rect, first_error, grid_rect_count, grid_rects, lru_victims, scoped_work, uniform_buffer_len};
 use super::textures::{ChunkOut, FxKey, ResKey, Resident, Stats};
@@ -416,7 +416,7 @@ impl Compositor {
             .iter()
             .map(|p| (p.tex.as_ref().map_or(Rect::EMPTY, |t| area(t.surface.get())), p.mask.as_ref().map_or(Rect::EMPTY, |m| area(m.surface.get()))))
             .collect();
-        let luts = plan.passes.iter().map(|p| p.lut.as_ref().map(|rows| lut_texture(device, queue, rows))).collect();
+        let luts = plan.passes.iter().map(|p| p.lut.as_ref().map(|rows| lut_texture_as(device, queue, rows, p.kernel == crate::plan::Kernel::Flare))).collect();
         let patterns = plan.passes.iter().map(|p| p.pattern.map(|pat| self.pattern_view(device, queue, pat))).collect();
         FrameRes { areas, luts, patterns }
     }

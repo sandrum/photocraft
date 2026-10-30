@@ -643,6 +643,18 @@ impl<'a> Planner<'a> {
                 }
                 Ok(s)
             }
+            LayerContent::Fill(f @ Fill::LensFlare(flare)) if layer.fill_cache.as_ref().is_none_or(|c| c.fill != *f) => {
+                // compose::render_fill: the flare on the canvas, dithered to the depth's levels
+                // (lens_flare::render_quantized), then the layer's masks.
+                if self.cx.mode == photocraft_color::ColorMode::Cmyk {
+                    return Err(Unsupported("native CMYK fill (composited on the CPU)".into()));
+                }
+                let mut p = Pass::new(Kernel::Flare, 0);
+                p.mask = self.mask_use(layer);
+                let quantum = photocraft_compose::adjustment_quantum(self.cx.depth);
+                p.lut = Some(super::flare::rows(flare, photocraft_compose::fill_frame(layer, self.cx.canvas), quantum));
+                Ok(self.emit(p))
+            }
             _ => {
                 let p = self.content_pass(layer)?;
                 Ok(self.emit(p))
@@ -712,7 +724,8 @@ impl<'a> Planner<'a> {
             }
             // Pattern fills fall back to the CPU compositor (see `check`).
             Fill::Pattern { .. } => {}
-            Fill::LensFlare(_) => return Err(Unsupported("lens flare fill (composited on the CPU)".into())),
+            // Evaluated in their own kernel (`content`); never reaches here.
+            Fill::LensFlare(_) => return Err(Unsupported("lens flare fill outside its own pass".into())),
         }
         Ok(())
     }

@@ -67,11 +67,18 @@ The layer renders light as straight RGBA with `alpha = max(light)`, and is creat
 normal layer: masks (paint the mask to hide the flare behind a subject), opacity, blend mode,
 clipping, stacking several flare layers, and adjustment layers above them as colour filters.
 
+The GPU compositor evaluates the flare in a shader (`fs_flare` in `crates/gpu/src/flare.wgsl`):
+`lens_flare::prepare` lays the flare out on the canvas once (positions, sizes, colours, each
+element's constants and each ray's angle, length and strength), `crates/gpu/src/plan/flare.rs`
+packs that into the pass's LUT texture, and the shader repeats the CPU's per-pixel arithmetic,
+textures and dither. It matches the CPU within one 8-bit step (`crates/gpu/tests/it/lens_flare.rs`
+checks every preset and texture). CMYK documents still composite flares on the CPU. On an Intel
+Iris Xe a 27 MP render costs about 80 ms per flare on the GPU, against 0.3–1 s on 12 CPU cores.
+
 ## Files
 
 - `.pcraft` saves the flare as data (editable on reopen).
 - PSD has no flare fill, so export writes the layer as its rendered pixels (with a warning).
-- The GPU compositor falls back to the CPU for documents with a flare layer.
 
 ## Commands
 

@@ -72,6 +72,41 @@ fn native_cmyk_fills_fall_back_only_without_a_valid_cache() {
         }
     }
 }
+
+/// A Lens Flare fill is evaluated in its own pass (`Kernel::Flare`) with the flare packed in its
+/// LUT, in a pass of its own or as clipping base, masked or in a group, at every depth; a CMYK
+/// document still composites it on the CPU, and a valid fill cache is drawn from its pixels.
+#[test]
+fn lens_flares_plan_a_flare_pass_except_in_cmyk() {
+    use photocraft_doc::lens_flare::{FlareCategory, FlareElement, LensFlare};
+    let glow = FlareElement::Glow { radius: 40.0, intensity: 1.0, color: [1.0, 0.8, 0.6], falloff: 1.0 };
+    let fill = Fill::LensFlare(Box::new(LensFlare::new(FlareCategory::SunFlare, "x", vec![glow])));
+    let flares = |p: &Plan<'_>| p.passes.iter().filter(|p| p.kernel == Kernel::Flare && p.lut.is_some()).count();
+    for depth in photocraft_color::SampleType::ALL {
+        let mut doc = Document::new("flare", Size::new(16, 9), ColorMode::Rgb, depth);
+        doc.layers.push(Layer::raster("bg", doc.pixel_format()));
+        let mut flare = Layer::new("Lens Flare", LayerContent::Fill(fill.clone()));
+        flare.blend = photocraft_color::BlendMode::Screen;
+        doc.layers.push(flare.clone());
+        assert_eq!(flares(&plan(&doc).unwrap()), 1);
+        // Masked, with a layer clipped to it, inside a group.
+        flare.mask = Some(photocraft_doc::LayerMask::hide_all());
+        let mut clipped = Layer::raster("clipped", doc.pixel_format());
+        clipped.clipped = true;
+        doc.layers = vec![Layer::group("g", vec![flare.clone(), clipped])];
+        let p = plan(&doc).unwrap();
+        assert_eq!(flares(&p), 1);
+        assert!(p.passes.iter().any(|p| p.kernel == Kernel::Flare && p.mask.is_some()));
+        // A valid cache is drawn from its pixels instead.
+        flare.fill_cache = Some(photocraft_doc::FillCache { fill: fill.clone(), surface: photocraft_raster::Surface::new(doc.pixel_format()) });
+        doc.layers = vec![flare.clone()];
+        assert_eq!(flares(&plan(&doc).unwrap()), 0);
+        flare.fill_cache = None;
+        doc.layers = vec![flare.clone()];
+        doc.mode = ColorMode::Cmyk;
+        assert!(plan(&doc).unwrap_err().0.contains("native CMYK fill"));
+    }
+}
 #[test]
 fn outer_glow_plan_knocks_out_see_through_fill() {
     use photocraft_doc::{Contour, FxCommon, GlowSource, GlowTechnique};

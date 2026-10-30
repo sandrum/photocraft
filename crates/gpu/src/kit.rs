@@ -125,7 +125,7 @@ pub(crate) fn uniform_entry(binding: u32, size: u64) -> wgpu::BindGroupLayoutEnt
 }
 
 /// The compositor's WGSL source (exposed for validation in tests).
-pub const SHADER: &str = include_str!("compose.wgsl");
+pub const SHADER: &str = concat!(include_str!("compose.wgsl"), include_str!("flare.wgsl"));
 
 /// Pass-level resources resolved for one page cell: resident pages (texture, mask) and effect
 /// maps (view and region) per pass.

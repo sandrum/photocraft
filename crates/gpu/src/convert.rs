@@ -283,13 +283,20 @@ pub(crate) fn rgb_gray32_to_f16(fmt: &PixelFormat, bytes: &[u8]) -> Option<Vec<u
 }
 
 pub(crate) fn lut_texture(device: &wgpu::Device, queue: &wgpu::Queue, rows: &[[f32; 4096]]) -> (wgpu::Texture, wgpu::TextureView) {
+    lut_texture_as(device, queue, rows, false)
+}
+
+/// [`lut_texture`], or with `rgba` the same bytes as 1024 RGBA32F texels a row, so a shader
+/// reads four values with one load (`fs_flare`'s packed flare).
+pub(crate) fn lut_texture_as(device: &wgpu::Device, queue: &wgpu::Queue, rows: &[[f32; 4096]], rgba: bool) -> (wgpu::Texture, wgpu::TextureView) {
+    let (width, format) = if rgba { (1024, wgpu::TextureFormat::Rgba32Float) } else { (4096, wgpu::TextureFormat::R32Float) };
     let t = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("pc_compose_lut"),
-        size: wgpu::Extent3d { width: 4096, height: rows.len() as u32, depth_or_array_layers: 1 },
+        size: wgpu::Extent3d { width, height: rows.len() as u32, depth_or_array_layers: 1 },
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::R32Float,
+        format,
         usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         view_formats: &[],
     });
@@ -298,7 +305,7 @@ pub(crate) fn lut_texture(device: &wgpu::Device, queue: &wgpu::Queue, rows: &[[f
         wgpu::TexelCopyTextureInfo { texture: &t, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
         &bytes,
         wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(4096 * 4), rows_per_image: Some(rows.len() as u32) },
-        wgpu::Extent3d { width: 4096, height: rows.len() as u32, depth_or_array_layers: 1 },
+        wgpu::Extent3d { width, height: rows.len() as u32, depth_or_array_layers: 1 },
     );
     let v = t.create_view(&Default::default());
     (t, v)
