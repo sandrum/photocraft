@@ -265,6 +265,37 @@ fn lens_blur_reads_an_alpha_channel_as_depth() {
     assert_eq!(st.history.past_len(), past, "no history step");
 }
 
+/// Set Focal Point: `focalPoint` puts the depth under that document point in focus, whatever
+/// `focalDistance` says; a malformed point is an error that changes nothing.
+#[test]
+fn lens_blur_focal_point_takes_the_depth_there() {
+    let mut s = session();
+    s.execute("channel.new", json!({"name": "Depth Map", "fill": "white"})).unwrap();
+    s.execute("channel.target", json!({"channel": "composite"})).unwrap();
+    let before = pixels(&s);
+    let p = |point: Value| json!({"radius": 6, "depthMap": "channel", "depthChannel": "Depth Map", "focalDistance": 0, "focalPoint": point});
+    // Depth 1 under the point: focal distance 255, everything in focus.
+    s.execute("filter.blur.lensBlur", p(json!([5, 5]))).unwrap();
+    assert_eq!(pixels(&s), before, "the point's depth is in focus");
+    // Inverted, the same point is depth 0: still in focus, as Photoshop measures after Invert.
+    let mut inv = p(json!([5.5, 5.5]));
+    inv["invert"] = json!(true);
+    s.execute("filter.blur.lensBlur", inv).unwrap();
+    assert_eq!(pixels(&s), before, "inverted depth at the point is in focus");
+    // Null or a point off the map keeps focalDistance (0 here): depth 1 blurs.
+    s.execute("filter.blur.lensBlur", p(Value::Null)).unwrap();
+    assert_ne!(pixels(&s), before);
+    s.execute("edit.undo", json!({})).unwrap();
+    s.execute("filter.blur.lensBlur", p(json!([-500, -500]))).unwrap();
+    assert_ne!(pixels(&s), before);
+    s.execute("edit.undo", json!({})).unwrap();
+    for bad in [json!([1]), json!("centre"), json!([1, "x"]), json!([1, 2, 3])] {
+        let e = s.execute("filter.blur.lensBlur", p(bad.clone())).unwrap_err().to_string();
+        assert!(e.contains("focalPoint"), "{bad}: {e}");
+        assert_eq!(pixels(&s), before, "{bad}: nothing changed");
+    }
+}
+
 #[test]
 fn params_map_to_algorithm_units() {
     assert_eq!(params_for("filter.pixelate.crystallize", &json!({"cellSize": 1})), Some(FilterParams::Crystallize { cell_size: 3.0, seed: 0 }));
