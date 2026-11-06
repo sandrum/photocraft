@@ -140,7 +140,7 @@ fn psd_export_writes_the_flare_as_pixels() {
     assert!(out.warnings.iter().any(|w| w.contains("light flare")), "{:?}", out.warnings);
     let back = photocraft_io::import("x.psd", &out.bytes).unwrap().document;
     let all = Rect::new(0, 0, 80, 45);
-    let (a, b) = (photocraft_compose::render(&doc, all).px, photocraft_compose::render(&back, all).px);
+    let (a, b) = (photocraft_compose::render(&doc, all).into_px(), photocraft_compose::render(&back, all).into_px());
     let worst = a.iter().zip(&b).flat_map(|(p, q)| p.iter().zip(q).map(|(x, y)| (x - y).abs())).fold(0.0f32, f32::max);
     assert!(worst < 0.02, "PSD looks different: {worst}");
 }

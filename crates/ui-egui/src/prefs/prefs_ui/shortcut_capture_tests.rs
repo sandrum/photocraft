@@ -106,7 +106,7 @@ fn toolbar_shortcut_overrides_remove_old_keys_and_skip_removed_group_members() {
     press(&mut app, Key::B, Modifiers::NONE);
     assert_eq!(app.ui.tool, Tool::Brush, "a removed tool cannot return through group memory");
     press(&mut app, Key::B, Modifiers::SHIFT);
-    assert_eq!(app.ui.tool, Tool::MixerBrush, "Shift cycling skips a removed tool");
+    assert_eq!(app.ui.tool, Tool::ColorReplacement, "Shift cycling skips a removed tool");
 
     app.run("edit.keyboardShortcuts", json!({"reset": true})).unwrap();
     app.ui.tool = Tool::Brush;
@@ -114,7 +114,7 @@ fn toolbar_shortcut_overrides_remove_old_keys_and_skip_removed_group_members() {
     assert_eq!(app.ui.tool, Tool::Pencil, "reset restores the default group");
     app.session.edit_prefs(|p| p.tools.use_shift_key_for_tool_switch = false);
     press(&mut app, Key::B, Modifiers::NONE);
-    assert_eq!(app.ui.tool, Tool::MixerBrush, "plain-key cycling still follows the preference");
+    assert_eq!(app.ui.tool, Tool::ColorReplacement, "plain-key cycling still follows the preference");
 }
 
 #[test]
@@ -197,6 +197,27 @@ fn shift_is_recorded_when_modifier_key_events_carry_no_bits() {
     key(&mut h, Key::F6, true, Modifiers::NONE);
     h.run_steps(2);
     assert_eq!(field(&h, id, "overrides")["edit.search"], json!("Shift+F6"));
+    assert_eq!(field(&h, id, "capture"), json!(false));
+}
+
+/// ⌘Z can be bound like any other key (#9487): while a field waits for keys it is the shortcut
+/// to record, not the dialog's own Undo (#4697), which used to undo the click that started the
+/// capture. Once recorded, ⌘Z steps the dialog back again.
+#[test]
+fn cmd_z_is_recorded_while_capturing_and_undoes_otherwise() {
+    let (mut h, id) = dialog(1.0, "edit.search", "search…");
+    capture(&mut h, &crate::shortcuts::pretty("Cmd+F"), Key::ControlLeft, Modifiers::COMMAND, Key::Z);
+    assert_eq!(field(&h, id, "overrides")["edit.search"], json!("Cmd+Z"));
+    assert_eq!(field(&h, id, "capture"), json!(false));
+    key(&mut h, Key::Z, true, Modifiers::COMMAND);
+    h.run_steps(2);
+    assert_ne!(field(&h, id, "overrides")["edit.search"], json!("Cmd+Z"), "⌘Z outside a capture undoes the change");
+    assert_eq!(field(&h, id, "capture"), json!(false), "and doesn't wait for keys again");
+    // CodeRabbit on #9504: clearing the restored capture isn't a new edit, so Redo still works.
+    h.run_steps(2);
+    key(&mut h, Key::Z, true, Modifiers::COMMAND | Modifiers::SHIFT);
+    h.run_steps(2);
+    assert_eq!(field(&h, id, "overrides")["edit.search"], json!("Cmd+Z"), "⇧⌘Z redoes the recorded shortcut");
     assert_eq!(field(&h, id, "capture"), json!(false));
 }
 
