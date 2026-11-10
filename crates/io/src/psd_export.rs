@@ -184,6 +184,26 @@ fn q255(v: f32) -> u8 {
     (v.clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
+/// A fill's PSD block (`SoCo`, `GdFl` or `PtFl`): the preserved one is kept while it still
+/// decodes to `f`, otherwise it is replaced by a regenerated one.
+fn fill_blocks(raw: &mut Vec<([u8; 4], Vec<u8>)>, regenerated: &mut Vec<([u8; 4], Vec<u8>)>, f: &photocraft_doc::Fill) {
+    // PSD has no light flare fill: the layer is written as its rendered pixels.
+    if matches!(f, photocraft_doc::Fill::LensFlare(_)) {
+        raw.retain(|(k, _)| !matches!(k, b"SoCo" | b"GdFl" | b"PtFl"));
+        return;
+    }
+    let keep = raw.iter().any(|(k, d)| matches!(k, b"SoCo" | b"GdFl" | b"PtFl") && blocks::parse_fill(k, d).as_ref() == Some(f));
+    if !keep {
+        raw.retain(|(k, _)| !matches!(k, b"SoCo" | b"GdFl" | b"PtFl"));
+        // Photoshop pads layer-level blocks to a multiple of 4 inside the length (every
+        // one in its own files is). A fill descriptor of 2 mod 4 bytes, as a pattern
+        // name of the wrong length gives, left the record's extra data unaligned.
+        let (key, mut data) = blocks::write_fill(f);
+        data.resize(data.len().next_multiple_of(4), 0);
+        regenerated.push((key, data));
+    }
+}
+
 impl Ex<'_> {
     fn compression(&self) -> Compression {
         if self.fmt.sample == SampleType::F32 { Compression::ZipPrediction } else { Compression::Rle }
@@ -417,6 +437,13 @@ impl Ex<'_> {
         }
     }
 
+    /// Warn that a fill PSD can't describe (a light flare) is saved as the layer's pixels.
+    fn warn_unwritable_fill(&mut self, l: &Layer, f: &photocraft_doc::Fill) {
+        if matches!(f, photocraft_doc::Fill::LensFlare(_)) {
+            self.warnings.push(format!("layer \"{}\": light flare saved as pixels (save as .pcraft to keep it editable)", l.name));
+        }
+    }
+
     /// Content blocks for `l`: preserved raw blocks (with `psd_raw`
     /// overrides) plus regenerated adjustment/fill blocks. A preserved
     /// adjustment or fill block is reused verbatim while it still decodes to
@@ -439,23 +466,6 @@ impl Ex<'_> {
             match keys.iter().find_map(|k| raw.iter().position(|(rk, _)| rk == *k)) {
                 Some(i) => raw[i].1 = d.to_vec(),
                 None => raw.push((*keys[0], d.to_vec())),
-            }
-        };
-        let fill_rule = |raw: &mut Vec<([u8; 4], Vec<u8>)>, regenerated: &mut Vec<([u8; 4], Vec<u8>)>, f: &photocraft_doc::Fill| {
-            // PSD has no light flare fill: the layer is written as its rendered pixels.
-            if matches!(f, photocraft_doc::Fill::LensFlare(_)) {
-                raw.retain(|(k, _)| !matches!(k, b"SoCo" | b"GdFl" | b"PtFl"));
-                return;
-            }
-            let keep = raw.iter().any(|(k, d)| matches!(k, b"SoCo" | b"GdFl" | b"PtFl") && blocks::parse_fill(k, d).as_ref() == Some(f));
-            if !keep {
-                raw.retain(|(k, _)| !matches!(k, b"SoCo" | b"GdFl" | b"PtFl"));
-                // Photoshop pads layer-level blocks to a multiple of 4 inside the length (every
-                // one in its own files is). A fill descriptor of 2 mod 4 bytes, as a pattern
-                // name of the wrong length gives, left the record's extra data unaligned.
-                let (key, mut data) = blocks::write_fill(f);
-                data.resize(data.len().next_multiple_of(4), 0);
-                regenerated.push((key, data));
             }
         };
         match &l.content {
@@ -512,14 +522,12 @@ impl Ex<'_> {
                 }
             }
             LayerContent::Fill(f) => {
-                if matches!(f, photocraft_doc::Fill::LensFlare(_)) {
-                    self.warnings.push(format!("layer \"{}\": light flare saved as pixels (save as .pcraft to keep it editable)", l.name));
-                }
-                fill_rule(&mut raw, &mut regenerated, f)
+                self.warn_unwritable_fill(l, f);
+                fill_blocks(&mut raw, &mut regenerated, f)
             }
             LayerContent::Shape(sh) => {
                 if let Some(f) = &sh.fill {
-                    fill_rule(&mut raw, &mut regenerated, f);
+                    fill_blocks(&mut raw, &mut regenerated, f);
                 }
                 let (w, h) = (self.canvas.width(), self.canvas.height());
                 crate::vector_map::shape_blocks(sh, &mut raw, w, h, self.dpi);
