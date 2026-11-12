@@ -2187,6 +2187,38 @@ fn replace_color_localized_color_clusters() {
     assert!(px(38)[0] > 0.9 && px(38)[1] < 0.1, "far away: still red {:?}", px(38));
 }
 
+/// Clicking the Lens Blur preview with a depth map sets Blur Focal Distance to the depth under
+/// the click, so the slider shows what came into focus. A value dragged afterwards stays until
+/// the point or the depth source changes.
+#[test]
+fn lens_blur_focal_distance_follows_the_clicked_depth() {
+    let mut session = photocraft_engine::Session::new();
+    session.execute("file.new", json!({"width": 8, "height": 8})).unwrap();
+    session.execute("channel.new", json!({"name": "Depth Map", "fill": "white"})).unwrap();
+    session.execute("channel.target", json!({"channel": "composite"})).unwrap();
+    let app = PhotocraftApp::new(session, crate::Services::default());
+    let mut f = Map::new();
+    f.insert("depthMap".into(), json!("none"));
+    assert!(!picks_focus(LENS_BLUR, &f), "no depth map: a click centres the view");
+    f.insert("depthMap".into(), json!("channel"));
+    f.insert("depthChannel".into(), json!("Depth Map"));
+    f.insert("focalDistance".into(), json!(0));
+    assert!(picks_focus(LENS_BLUR, &f));
+    assert!(!picks_focus("filter.blur.gaussianBlur", &f));
+    show_focal_distance(&app, LENS_BLUR, &mut f);
+    assert_eq!(f["focalDistance"], json!(0), "no point yet");
+    f.insert(FOCAL_POINT.into(), json!([3, 3]));
+    show_focal_distance(&app, LENS_BLUR, &mut f);
+    assert_eq!(f["focalDistance"], json!(255.0), "white depth under the click");
+    f.insert("focalDistance".into(), json!(40));
+    show_focal_distance(&app, LENS_BLUR, &mut f);
+    assert_eq!(f["focalDistance"], json!(40), "a later edit is kept while nothing changed");
+    f.insert("invert".into(), json!(true));
+    show_focal_distance(&app, LENS_BLUR, &mut f);
+    assert_eq!(f["focalDistance"], json!(0.0), "inverted depth is sampled again");
+    assert!(params_of(&f).get("__focalSampled").is_none(), "bookkeeping stays out of the params");
+}
+
 /// Lens Blur's focal point is a document position: the preview's proxy is k times smaller, so
 /// the point the user clicked must land on the same content there.
 #[test]

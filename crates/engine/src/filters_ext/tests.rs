@@ -325,6 +325,26 @@ fn lens_blur_focal_point_takes_the_depth_there() {
     }
 }
 
+/// The Lens Blur dialog shows the focal distance a click picks: the depth under the point,
+/// as running the filter resolves it; nothing without a point, a depth source or a map there.
+#[test]
+fn lens_blur_focal_distance_reads_the_depth_under_the_point() {
+    let mut s = session();
+    s.execute("channel.new", json!({"name": "Depth Map", "fill": "white"})).unwrap();
+    s.execute("channel.target", json!({"channel": "composite"})).unwrap();
+    let p = |point: Value| json!({"radius": 6, "depthMap": "channel", "depthChannel": "Depth Map", "focalDistance": 0, "focalPoint": point});
+    assert_eq!(lens_blur_focal_distance(&s, &p(json!([5, 5]))).unwrap(), Some(255.0));
+    let mut inv = p(json!([5, 5]));
+    inv["invert"] = json!(true);
+    assert_eq!(lens_blur_focal_distance(&s, &inv).unwrap(), Some(0.0));
+    assert_eq!(lens_blur_focal_distance(&s, &p(Value::Null)).unwrap(), None, "no point");
+    assert_eq!(lens_blur_focal_distance(&s, &p(json!([-500, -500]))).unwrap(), None, "off the map");
+    let none = json!({"depthMap": "none", "focalPoint": [5, 5]});
+    assert_eq!(lens_blur_focal_distance(&s, &none).unwrap(), None, "no depth source");
+    assert!(lens_blur_focal_distance(&s, &p(json!("centre"))).is_err());
+    assert!(lens_blur_focal_distance(&Session::new(), &p(json!([5, 5]))).is_err(), "no document");
+}
+
 #[test]
 fn params_map_to_algorithm_units() {
     assert_eq!(params_for("filter.pixelate.crystallize", &json!({"cellSize": 1})), Some(FilterParams::Crystallize { cell_size: 3.0, seed: 0 }));

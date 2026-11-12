@@ -847,6 +847,37 @@ fn focal_point_row(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
     f.insert(SETTING_FOCAL_POINT.into(), json!(armed));
 }
 
+/// Whether a click on `cmd`'s preview can pick a focal point: Lens Blur with a depth map.
+pub(crate) fn picks_focus(cmd: &str, f: &Map<String, Value>) -> bool {
+    cmd == LENS_BLUR && f.get("depthMap").and_then(Value::as_str).is_some_and(|d| d != "none")
+}
+
+/// What [`show_focal_distance`] last sampled for: the point and the depth source.
+const FOCAL_SAMPLED: &str = "__focalSampled";
+
+/// Lens Blur's Blur Focal Distance follows the focal point: once a click on the preview sets one,
+/// the slider shows the depth there (0–255), so the focus can be picked on the depth map with the
+/// mouse and then fine-tuned. Sampled again only when the point or the depth source changes (the
+/// depth map is read whole). The engine resolves the point the same way when the filter runs.
+pub(crate) fn show_focal_distance(app: &PhotocraftApp, cmd: &str, f: &mut Map<String, Value>) {
+    if cmd != LENS_BLUR {
+        return;
+    }
+    let Some(point) = f.get(FOCAL_POINT).filter(|v| !v.is_null()).cloned() else {
+        f.remove(FOCAL_SAMPLED);
+        return;
+    };
+    let key = json!([point, f.get("depthMap"), f.get("depthChannel"), f.get("invert")]);
+    if f.get(FOCAL_SAMPLED) == Some(&key) {
+        return;
+    }
+    f.insert(FOCAL_SAMPLED.into(), key);
+    let params = app.with_mask_target(cmd, params_of(f));
+    if let Ok(Some(d)) = photocraft_engine::filters_ext::lens_blur_focal_distance(&app.session, &params) {
+        f.insert("focalDistance".into(), json!(d.round()));
+    }
+}
+
 /// Lens Blur's Depth Map Source lists the document's alpha channels after None, Transparency
 /// and Layer Mask, as in Photoshop (#7400): their names go to `__channels`. A `channel` source
 /// without a channel this document has (references aren't remembered) opens as None.
