@@ -117,3 +117,36 @@ fn set_focal_point_needs_a_depth_map_and_clear_forgets_the_point() {
     click_preview(&mut h);
     assert_eq!(focal_point(&mut h), None);
 }
+
+#[test]
+fn the_focal_distance_follows_the_depth_under_the_point() {
+    let mut h = harness();
+    // An alpha channel white in the middle, black at the edges: the depth map.
+    for (method, params) in [
+        ("select.rect", json!({"x": 16, "y": 12, "width": 32, "height": 24})),
+        ("select.saveSelection", json!({"name": "Depth"})),
+        ("select.deselect", json!({})),
+    ] {
+        h.state_mut().run(method, params).unwrap();
+    }
+    let opened = control(&mut h, "ui.menu.invoke", json!({"id": COMMAND}));
+    let id = opened["dialog"].clone();
+    control(&mut h, "ui.dialog.set", json!({"dialog": id, "field": "depthMap", "value": "channel:0"}));
+    h.run_steps(4);
+    set_focal_point(&mut h);
+    click_preview(&mut h);
+    let point = focal_point(&mut h).expect("the click set the focal point");
+    let distance = |h: &mut Harness<'_, Box<PhotocraftApp>>| find(&control(h, "ui.inspect", json!({})), "focalDistance").and_then(Value::as_f64);
+    assert_eq!(distance(&mut h), Some(255.0), "the middle of the depth map is white: {point}");
+
+    // Invert reads the depth map the other way: the slider follows.
+    control(&mut h, "ui.dialog.set", json!({"dialog": id, "field": "invert", "value": true}));
+    h.run_steps(3);
+    assert_eq!(distance(&mut h), Some(0.0));
+
+    // Moving the slider takes over from the point.
+    control(&mut h, "ui.dialog.set", json!({"dialog": id, "field": "focalDistance", "value": 100}));
+    h.run_steps(3);
+    assert_eq!(focal_point(&mut h), None, "the slider cleared the point");
+    assert_eq!(distance(&mut h), Some(100.0));
+}

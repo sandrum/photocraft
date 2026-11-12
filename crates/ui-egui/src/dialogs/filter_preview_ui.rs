@@ -80,6 +80,58 @@ pub(crate) fn feed(app: &mut PhotocraftApp, ctx: &egui::Context) {
             dialog.set_preview(picture);
         }
         pick_focal_point(app, id);
+        follow_focal_point(app, ctx, id);
+    }
+}
+
+/// What Lens Blur's focal distance was last sampled for: the point, the depth source and Invert, and the distance.
+type FocalSample = (Value, f64);
+
+/// Lens Blur's Blur Focal Distance follows the focal point: once a click sets one, the slider shows the depth there
+/// (0–255), so the focus is picked on the depth map with the mouse and then fine-tuned. Sampled again only when the
+/// point, the depth source or Invert changes (the depth map is read whole); the engine resolves the point the same way
+/// when the filter runs. Moving the slider afterwards takes over: the point is cleared.
+fn follow_focal_point(app: &mut PhotocraftApp, ctx: &egui::Context, id: DialogId) {
+    let Some(dialog) = app.framework.dialogs.get_by_id::<HostedParamDialog>(id) else { return };
+    if dialog.key() != Some(crate::filter_dialog::LENS_BLUR) {
+        return;
+    }
+    let memory = egui::Id::unique(("lens-blur-focal-sample", id.value()));
+    let fields = dialog.fields();
+    let Some(point) = fields.point(crate::filter_dialog::FOCAL_POINT) else {
+        ctx.data_mut(|d| d.remove::<FocalSample>(memory));
+        return;
+    };
+    let key = serde_json::json!([point, fields.text("depthMap"), fields.bool("invert")]);
+    let distance = fields.number("focalDistance");
+    let last: Option<FocalSample> = ctx.data(|d| d.get_temp(memory));
+    if let Some((sampled, shown)) = last
+        && sampled == key
+    {
+        if distance != Some(shown)
+            && let Some(dialog) = app.framework.dialogs.get_mut_by_id::<HostedParamDialog>(id)
+        {
+            dialog.clear_field(crate::filter_dialog::FOCAL_POINT);
+            ctx.data_mut(|d| d.remove::<FocalSample>(memory));
+        }
+        return;
+    }
+    let key_command = crate::filter_dialog::LENS_BLUR;
+    let params = app.with_mask_target(key_command, crate::filter_dialog::command_params(key_command, fields));
+    // A point the engine cannot sample (no depth there yet) keeps the slider as it is; either way the attempt is
+    // remembered, so the depth map is not read again every pass.
+    let shown = match photocraft_engine::filters_ext::lens_blur_focal_distance(&app.session, &params) {
+        Ok(Some(depth)) => {
+            let depth = f64::from(depth.round());
+            if let Some(dialog) = app.framework.dialogs.get_mut_by_id::<HostedParamDialog>(id) {
+                dialog.set_field("focalDistance", FieldValue::Number(depth));
+            }
+            Some(depth)
+        }
+        _ => distance,
+    };
+    if let Some(shown) = shown {
+        ctx.data_mut(|d| d.insert_temp(memory, (key, shown)));
     }
 }
 

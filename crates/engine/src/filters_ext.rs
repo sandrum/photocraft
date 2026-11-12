@@ -646,8 +646,19 @@ pub(crate) fn resolve_in_layer(fp: &mut FilterParams, layer: &Layer, bounds: Rec
 /// Runs after the depth map is resolved; `layer` supplies the alpha for the Transparency source.
 /// Without a depth source, or with a point off the map, the focal distance stays as given.
 pub(crate) fn resolve_focal_point(fp: &mut FilterParams, layer: Option<&Layer>, p: &Value) -> Result<()> {
-    let FilterParams::LensBlur { depth, depth_map, focal_distance, invert_depth, .. } = fp else { return Ok(()) };
-    let Some(point) = p.get("focalPoint").filter(|v| !v.is_null()) else { return Ok(()) };
+    if let Some(d) = focal_depth(fp, layer, p)?
+        && let FilterParams::LensBlur { focal_distance, .. } = fp
+    {
+        *focal_distance = d;
+    }
+    Ok(())
+}
+
+/// The Blur Focal Distance (0–255) `focalPoint` picks on a resolved Lens Blur, or `None` when
+/// there is no point, no depth source, or the point is off the map.
+fn focal_depth(fp: &FilterParams, layer: Option<&Layer>, p: &Value) -> Result<Option<f32>> {
+    let FilterParams::LensBlur { depth, depth_map, invert_depth, .. } = fp else { return Ok(None) };
+    let Some(point) = p.get("focalPoint").filter(|v| !v.is_null()) else { return Ok(None) };
     let bad = |msg: &str| EngineError::BadParams { cmd: "filter.blur.lensBlur".into(), msg: msg.into() };
     let coords: Vec<f64> = point.as_array().map(|a| a.iter().filter_map(Value::as_f64).collect()).unwrap_or_default();
     let [x, y] = coords[..] else { return Err(bad("`focalPoint` must be [x, y] in document pixels")) };
@@ -656,13 +667,13 @@ pub(crate) fn resolve_focal_point(fp: &mut FilterParams, layer: Option<&Layer>, 
     }
     let (x, y) = (x.floor().clamp(-1e9, 1e9) as i64, y.floor().clamp(-1e9, 1e9) as i64);
     let sample: Box<dyn Fn(i32, i32) -> Option<f32>> = match depth {
-        DepthSource::None => return Ok(()),
+        DepthSource::None => return Ok(None),
         DepthSource::LayerMask | DepthSource::Channel => {
-            let Some(map) = depth_map.clone() else { return Ok(()) };
+            let Some(map) = depth_map.clone() else { return Ok(None) };
             Box::new(move |x, y| map.rect.contains(x, y).then(|| map.get(x, y, 0)))
         }
         DepthSource::Transparency => {
-            let Some(surf) = layer.and_then(|l| l.surface()).filter(|s| s.format().alpha) else { return Ok(()) };
+            let Some(surf) = layer.and_then(|l| l.surface()).filter(|s| s.format().alpha) else { return Ok(None) };
             let n = surf.channels();
             Box::new(move |x, y| {
                 let mut px = [0.0f32; 8];
@@ -682,11 +693,29 @@ pub(crate) fn resolve_focal_point(fp: &mut FilterParams, layer: Option<&Layer>, 
             }
         }
     }
-    if count > 0 {
-        let d = sum / count as f32;
-        *focal_distance = (if *invert_depth { 1.0 - d } else { d }).clamp(0.0, 1.0) * 255.0;
+    if count == 0 {
+        return Ok(None);
     }
-    Ok(())
+    let d = sum / count as f32;
+    Ok(Some((if *invert_depth { 1.0 - d } else { d }).clamp(0.0, 1.0) * 255.0))
+}
+
+/// The Blur Focal Distance Lens Blur's `focalPoint` picks in the active document, resolving the
+/// depth source as running the filter with params `p` would. The Lens Blur dialog shows it on the
+/// Focal Distance slider when the preview is clicked. `None` when there is no point, no depth
+/// source, or the point is off the map.
+pub fn lens_blur_focal_distance(s: &Session, p: &Value) -> Result<Option<f32>> {
+    let id = "filter.blur.lensBlur";
+    let mut fp = params_for(id, p).ok_or_else(|| EngineError::Other(format!("unknown filter {id}")))?;
+    resolve(s, &mut fp, p)?;
+    let doc = &s.active().ok_or(EngineError::NoDocument)?.doc;
+    let layer = doc.layer(crate::commands::layer_param(s, p)?);
+    let sel_bounds = doc.selection.as_ref().map(photocraft_raster::Surface::content_bounds);
+    let bounds = sel_bounds.filter(|b| !b.is_empty()).unwrap_or_else(|| doc.bounds());
+    if let Some(l) = layer {
+        resolve_in_layer(&mut fp, l, bounds);
+    }
+    focal_depth(&fp, layer, p)
 }
 
 fn relight_bad(msg: &str) -> EngineError {
