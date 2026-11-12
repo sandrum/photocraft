@@ -173,7 +173,10 @@ fn window_sized(app: &PhotocraftApp, dialog: u64, ui: &mut egui::Ui, f: &mut Map
         cy -= d.y / zoom;
     }
     // Lens Blur's Set Focal Point: the click picks the focal point instead of centring the view.
-    let setting_focal_point = f.get(crate::filter_dialog::SETTING_FOCAL_POINT).and_then(Value::as_bool) == Some(true);
+    // With a depth map and the whole image in view, a click has nothing else to do, so it picks
+    // the focal point without arming the button first.
+    let setting_focal_point =
+        f.get(crate::filter_dialog::SETTING_FOCAL_POINT).and_then(Value::as_bool) == Some(true) || (fit && crate::filter_dialog::picks_focus(&cmd, f));
     if setting_focal_point && response.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
     }
@@ -189,6 +192,7 @@ fn window_sized(app: &PhotocraftApp, dialog: u64, ui: &mut egui::Ui, f: &mut Map
         }
     }
     (cx, cy) = clamp_center(cx, cy, doc.x, doc.y);
+    crate::filter_dialog::show_focal_distance(app, &cmd, f);
 
     ui.horizontal(|ui| {
         if crate::icons::button(ui, "minus", 22.0, false, tl!("Zoom out")).clicked() {
