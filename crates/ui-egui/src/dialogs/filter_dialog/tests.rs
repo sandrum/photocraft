@@ -1848,3 +1848,27 @@ fn lens_blur_focal_point_scales_to_the_preview_proxy() {
     scale_preview_params(LENS_BLUR, &mut p, 1);
     assert_eq!(p["focalPoint"], json!([401, 99]), "full-size previews keep the point");
 }
+
+/// An alpha channel chosen as Lens Blur's depth map reaches the command as the `channel` source and its index: the
+/// menu's own `channel:N` id was sent as is, and the engine refused it at OK and in the preview.
+#[test]
+fn lens_blur_alpha_channel_source_runs() {
+    let mut app = new_app();
+    app.run("file.new", json!({"width": 64, "height": 64})).unwrap();
+    for name in ["Mask", "Depth"] {
+        app.run("select.all", json!({})).unwrap();
+        app.run("select.saveSelection", json!({"name": name})).unwrap();
+    }
+    app.run("select.deselect", json!({})).unwrap();
+    let id = open(&mut app, LENS_BLUR).unwrap();
+    passes(&mut app, 2);
+    set(&mut app, id, "depthMap", json!("channel:1"));
+    passes(&mut app, 2);
+    let params = command_params(LENS_BLUR, &fields_of(&app, id));
+    assert_eq!((&params["depthMap"], &params["depthChannel"]), (&json!("channel"), &json!(1)), "{params}");
+    app.run(LENS_BLUR, params).expect("the command takes the channel source");
+    // The other sources pass through.
+    set(&mut app, id, "depthMap", json!("transparency"));
+    let params = command_params(LENS_BLUR, &fields_of(&app, id));
+    assert_eq!((&params["depthMap"], params.get("depthChannel")), (&json!("transparency"), None));
+}
