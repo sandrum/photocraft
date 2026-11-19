@@ -135,15 +135,15 @@ fn follow_focal_point(app: &mut PhotocraftApp, ctx: &egui::Context, id: DialogId
     }
 }
 
-/// Lens Blur's Set Focal Point: a click on the preview while it is on sets the focal point to the document pixel under
-/// the click and turns Set Focal Point off. The click is taken either way, so one made before Set Focal Point was turned
-/// on never lands later; without Set Focal Point the pane has already centred on it.
+/// Lens Blur's focal point: with a depth map, a click on the preview sets it to the document pixel under the click. The
+/// click is taken either way, so one made before a depth map was chosen never lands later; without one the pane has
+/// already centred on it.
 fn pick_focal_point(app: &mut PhotocraftApp, id: DialogId) {
     let Some(dialog) = app.framework.dialogs.get_by_id::<HostedParamDialog>(id) else { return };
     if dialog.key() != Some(crate::filter_dialog::LENS_BLUR) {
         return;
     }
-    let armed = crate::filter_dialog::setting_focal_point(dialog.fields());
+    let armed = crate::filter_dialog::picks_focal_point(dialog.fields());
     let Some(subject) = subject(app, dialog) else { return };
     let Some(doc) = app.session.active().map(|st| st.doc.clone()) else { return };
     let k = picture_factor(app, id, dialog, &doc, &subject);
@@ -154,7 +154,6 @@ fn pick_focal_point(app: &mut PhotocraftApp, id: DialogId) {
     }
     let Some(point) = focal_pixel(document_point(click, k), [doc.size.width, doc.size.height]) else { return };
     dialog.set_field(crate::filter_dialog::FOCAL_POINT, FieldValue::Point(point));
-    dialog.set_field(crate::filter_dialog::SETTING_FOCAL_POINT, FieldValue::Bool(false));
 }
 
 /// The document pixel a focal point at `point` names in a `size`d document: floored and kept on the image; `None` for a

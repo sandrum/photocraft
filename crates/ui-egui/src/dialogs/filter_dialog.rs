@@ -23,7 +23,7 @@ use serde_json::{Map, Value, json};
 use crate::PhotocraftApp;
 
 mod rows;
-pub(crate) use rows::{FOCAL_POINT, LENS_BLUR, REPLACE_COLOR, SETTING_FOCAL_POINT, replace_color_sample, setting_focal_point};
+pub(crate) use rows::{FOCAL_POINT, LENS_BLUR, REPLACE_COLOR, picks_focal_point, replace_color_sample};
 
 const MATCH_COLOR: &str = "image.adjustments.matchColor";
 #[cfg(test)]
@@ -506,8 +506,8 @@ fn builder(
     let key = command.to_owned();
     let canvas = app.session.active_index().map(|idx| crate::canvas::document_display::CanvasHost::primary(app, idx).canvas_id());
     move |fields: &mut DialogFields| {
-        // While Lens Blur's Set Focal Point is on, a click on the preview picks the point instead of centring the view.
-        let picks_point = key == LENS_BLUR && setting_focal_point(fields);
+        // With a depth map, a click on Lens Blur's preview picks the focal point instead of centring the view.
+        let picks_point = key == LENS_BLUR && picks_focal_point(fields);
         let mut dialog = ParamDialog::command(key.clone(), title.clone(), params.clone())
             .values(Bind::bound(fields))
             .reset_to(reset.clone())
