@@ -89,6 +89,7 @@ impl CanvasTool for DialogTool<'_> {
                     state.phase = pattern_fill_ui::press(app, at);
                     (state.phase.is_some(), false)
                 }
+                DialogPick::FlareLight => (crate::lens_flare_ui::place_at(app, at), false),
             }
         });
         if !took {
@@ -129,6 +130,9 @@ impl CanvasTool for DialogTool<'_> {
                     state.phase = Some(drag);
                 }
             }
+            DialogPick::FlareLight => {
+                crate::lens_flare_ui::place_at(app, at);
+            }
             // The pipettes keep sampling while the button is held.
             _ => canvas_input::resample(app, pick, at, mods),
         });
@@ -160,7 +164,7 @@ impl CanvasTool for DialogTool<'_> {
     /// The drags that move content (the pattern's phase, a shadow's offset, a gradient's offset) follow every move from
     /// the press, so a move of a pixel or two moves it, as production's dialog drags; none of them reads a click.
     fn takes_every_move(&self) -> bool {
-        self.state.press.is_some() && matches!(self.pick, DialogPick::PatternPhase | DialogPick::ShadowDrag | DialogPick::GradientDrag)
+        self.state.press.is_some() && matches!(self.pick, DialogPick::PatternPhase | DialogPick::ShadowDrag | DialogPick::GradientDrag | DialogPick::FlareLight)
     }
 
     fn paint(&self, _draw: &Draw<'_>, _cx: &ToolContext<'_>) {}

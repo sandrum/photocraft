@@ -223,6 +223,10 @@ gradient.fill.stop
 gradient.fill.get
 layer.fill.solidColor.set
 layer.fill.pattern.set
+layer.newFillLayer.lightFlare
+layer.fill.lightFlare.set
+layer.fill.lightFlare.presets
+layer.fill.lightFlare.look
 type.create
 type.edit
 type.setStyle

@@ -120,6 +120,9 @@ pub(crate) fn display_doc_live(app: &mut PhotocraftApp, idx: usize, live: LivePr
     if let Some(shown) = crate::solid_fill_ui::display_doc(app, idx) {
         return shown;
     }
+    if let Some(shown) = crate::lens_flare_ui::display_doc(app, idx) {
+        return shown;
+    }
     if let Some(shown) = crate::pattern_fill_ui::display_doc(app, idx) {
         return shown;
     }

@@ -460,6 +460,7 @@ pub(crate) const TAKERS: &[fn(&mut PhotocraftApp, &egui::Context)] = &[
     file_ui::take,
     format_prompts::take,
     pattern_fill_ui::take,
+    lens_flare_ui::take,
     crate::workspace_ui::take,
     crate::kys_import::take,
     crate::prefs_ui::take_presets,
@@ -745,6 +746,7 @@ pub mod palette;
 mod paths_export_default_tests;
 #[cfg(test)]
 mod paths_export_document_bounds_tests;
+pub(crate) mod lens_flare_ui;
 pub(crate) mod pattern_fill_ui;
 pub mod preset_group_prompt;
 pub mod rasterize_prompt;

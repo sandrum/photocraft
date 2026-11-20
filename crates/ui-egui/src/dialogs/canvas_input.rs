@@ -42,6 +42,8 @@ pub(crate) enum DialogPick {
     GradientDrag,
     /// A drag on the image moves the Pattern Fill phase (`pattern_fill_ui`'s gesture).
     PatternPhase,
+    /// A click or drag on the image places the Light Flare's light (`lens_flare_ui`).
+    FlareLight,
     /// A click on the image moves a filter preview's view to the point.
     Locator,
 }
@@ -87,6 +89,9 @@ pub(crate) fn armed(app: &PhotocraftApp) -> Option<DialogPick> {
     // The phase drag belongs to the Pattern Fill dialog while it is the top: a dialog opened above it takes the canvas.
     if dialogs.get_by_id::<PatternFillDialog>(top).is_some() && super::pattern_fill_ui::drag_target(app).is_some() {
         return Some(DialogPick::PatternPhase);
+    }
+    if super::lens_flare_ui::placing(app) {
+        return Some(DialogPick::FlareLight);
     }
     super::filter_preview_ui::locator(app).is_some().then_some(DialogPick::Locator)
 }
@@ -241,5 +246,6 @@ pub(crate) fn cursor(app: &PhotocraftApp, pick: DialogPick) -> Cursor {
         DialogPick::CurvesPoint => pipette(None),
         DialogPick::ShadowDrag | DialogPick::GradientDrag | DialogPick::PatternPhase => Cursor::System(CursorIcon::Move),
         DialogPick::Locator => Cursor::Painted(PaintedCursor::Locator),
+        DialogPick::FlareLight => Cursor::System(CursorIcon::Crosshair),
     }
 }

@@ -126,6 +126,7 @@ impl PhotocraftApp {
             export_open: None,
             pending_reveal: None,
             pattern_fill: Default::default(),
+            light_flare: Default::default(),
             #[cfg(not(target_arch = "wasm32"))]
             filter_preview_worker: Default::default(),
             redraws: Default::default(),

@@ -464,6 +464,9 @@ pub(crate) fn invoke_unguarded(app: &mut PhotocraftApp, ctx: &egui::Context, id:
             if let Some(dialog) = crate::pattern_fill_ui::open(app) {
                 return Ok(dialog_reply(dialog));
             }
+            if let Some(dialog) = crate::lens_flare_ui::open(app) {
+                return Ok(dialog_reply(dialog));
+            }
             let r = app.run(id, params)?;
             crate::panel_docking::show_panel(app, "properties", Some(true))?;
             Ok(r)
@@ -532,6 +535,9 @@ pub(crate) fn invoke_unguarded(app: &mut PhotocraftApp, ctx: &egui::Context, id:
         photocraft_engine::pattern_fill_cmds::CREATE if params.as_object().is_none_or(|o| o.is_empty()) => {
             Ok(dialog_reply(crate::pattern_fill_ui::open_new(app)?))
         }
+        // Layer › New Fill Layer › Light Flare… from the menu: the Light Flare dialog (with params:
+        // the engine directly).
+        photocraft_engine::lens_flare_cmds::CREATE if params.as_object().is_none_or(|o| o.is_empty()) => Ok(dialog_reply(crate::lens_flare_ui::open_new(app)?)),
         // Edit › Fill… from the menu or its shortcuts: the Fill dialog (with params: the engine).
         crate::fill_ui::COMMAND if params.as_object().is_none_or(|o| o.is_empty()) => {
             // Admission follows the effective mask/channel target, just like enablement and run.

@@ -159,6 +159,7 @@ pub use dialogs::new_guide_ui;
 pub use dialogs::new_layer_ui;
 pub use dialogs::open_prompt;
 pub use dialogs::palette;
+pub(crate) use dialogs::lens_flare_ui;
 pub(crate) use dialogs::pattern_fill_ui;
 pub use dialogs::preset_group_prompt;
 pub use dialogs::rasterize_prompt;
@@ -473,6 +474,8 @@ pub struct PhotocraftApp {
     pub(crate) pending_reveal: Option<(photocraft_doc::LayerId, craft::layers::ui::panel::Groups)>,
     /// The Pattern Fill dialog's preview and open state (`pattern_fill_ui`).
     pub(crate) pattern_fill: pattern_fill_ui::State,
+    /// The Light Flare dialog's preview and open state (`lens_flare_ui`).
+    pub(crate) light_flare: lens_flare_ui::State,
     #[cfg(not(target_arch = "wasm32"))]
     filter_preview_worker: crate::dialogs::filter_preview_worker::Worker,
     /// Full CPU canvas redraws running in the background, by document (#4024).
