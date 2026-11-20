@@ -494,6 +494,16 @@ pub(crate) fn title_of(label: &str) -> Label {
     Label::from(crate::i18n::t(label).trim_end_matches('…').to_string())
 }
 
+/// The least a full-window filter dialog (Lens Blur) opens at or is resized to.
+const FULL_WINDOW_MIN: egui::Vec2 = egui::vec2(720.0, 440.0);
+
+/// A full-window filter dialog's size in a `window`-sized app window: all of it but a margin, never less than
+/// [`FULL_WINDOW_MIN`].
+fn full_window_size(window: egui::Vec2) -> egui::Vec2 {
+    let size = window - egui::vec2(64.0, 64.0);
+    if size.x.is_finite() && size.y.is_finite() { size.max(FULL_WINDOW_MIN) } else { FULL_WINDOW_MIN }
+}
+
 /// The build closure of a command dialog over its values, over the active document's canvas: its droppers, the Blur
 /// Gallery's pins and the preview pane's locator take presses there.
 fn builder(
@@ -505,6 +515,7 @@ fn builder(
 ) -> impl for<'b> Fn(&'b mut DialogFields) -> ParamDialog<'b> + Send + 'static {
     let key = command.to_owned();
     let canvas = app.session.active_index().map(|idx| crate::canvas::document_display::CanvasHost::primary(app, idx).canvas_id());
+    let large = full_window_size(app.ctx().content_rect().size());
     move |fields: &mut DialogFields| {
         // With a depth map, a click on Lens Blur's preview picks the focal point instead of centring the view.
         let picks_point = key == LENS_BLUR && picks_focal_point(fields);
@@ -517,6 +528,11 @@ fn builder(
             .alert_title(tl!("PhotoCraft"));
         if let Some(canvas) = canvas {
             dialog = dialog.canvas(canvas);
+        }
+        if key == LENS_BLUR {
+            // Lens Blur is judged on the whole image, as in Photoshop: the preview fills a dialog that nearly fills the
+            // window (and can be resized), with the parameters in a column beside it.
+            dialog = dialog.layout(ParamLayout::Workspace).shaped(move |d| d.resizable(true).overlay(move |o| o.size(large).min_size(FULL_WINDOW_MIN)));
         }
         if key == "image.mode.colorTable" {
             dialog = dialog
