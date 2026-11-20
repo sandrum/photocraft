@@ -2,6 +2,8 @@
 
 mod actions_duplicate;
 mod actions_panel_menu;
+mod apply_data_set_dialog;
+mod apply_data_set_preview;
 mod batch_export_options;
 mod brush_reset_defaults;
 mod camera_raw_histogram;
@@ -25,6 +27,7 @@ mod interactive_bench_reporting;
 mod layout_perf;
 mod lens_blur_focal_point;
 mod magnetic_lasso_right_click;
+mod mixer_reset_defaults;
 mod paint_bucket_all_layers;
 mod pending_remove_pointer;
 mod radial_blur_center;
