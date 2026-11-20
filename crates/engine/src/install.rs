@@ -35,6 +35,7 @@ const TABLES: &[Table] = &[
     ("gradient_fill_cmds", crate::gradient_fill_cmds::specs),
     ("solid_fill_cmds", crate::solid_fill_cmds::specs),
     ("pattern_fill_cmds", crate::pattern_fill_cmds::specs),
+    ("lens_flare_cmds", crate::lens_flare_cmds::specs),
     ("type_cmds", crate::type_cmds::specs),
     ("type_mask_cmds", crate::type_mask_cmds::specs),
     ("transform_cmds", crate::transform_cmds::specs),

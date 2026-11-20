@@ -77,6 +77,11 @@ pub(super) fn purge(s: &mut Session, what: &str) -> Result<Value> {
             freed = freed.saturating_add(strokes);
             items.push("shape stroke cache");
         }
+        let flares = photocraft_compose::lens_flare::purge_cache();
+        if flares > 0 {
+            freed = freed.saturating_add(flares);
+            items.push("light flare cache");
+        }
         let luts = photocraft_compose::lut_rows::purge_cache();
         if luts > 0 {
             freed = freed.saturating_add(luts);
@@ -106,6 +111,7 @@ pub(super) fn can_purge_all(s: &Session) -> std::result::Result<(), String> {
             || photocraft_compose::masks::cache_bytes() > 0
             || crate::smart_cmds::stack_cache_bytes() > 0
             || crate::smart_cmds::source_cache_bytes() > 0
+            || photocraft_compose::lens_flare::cache_bytes() > 0
             || photocraft_paint::mip_cache_bytes() > 0
             || photocraft_compose::lut_rows::cache_bytes() > 0
         {

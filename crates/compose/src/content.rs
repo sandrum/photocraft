@@ -139,6 +139,12 @@ fn render_fill_with<A: BufferAlloc>(
             }
             Ok(buffer)
         }
+        // Placed on the canvas (`fill_frame` gives a flare the whole canvas).
+        Fill::LensFlare(flare) => {
+            let mut buffer = alloc.filled(rect, [0.0; 4])?;
+            buffer.px = crate::lens_flare::render_quantized(flare, rect, frame, quantum);
+            Ok(buffer)
+        }
     }
 }
 
@@ -161,7 +167,8 @@ fn surface_to_scratch_with<A: BufferAlloc>(s: &Surface, rect: Rect, alloc: &A) -
 pub fn fill_frame(layer: &Layer, canvas: Rect) -> Rect {
     let mut frame = canvas;
     // "Align with layer" off: the canvas (the Gradient tool's live gradients).
-    if let LayerContent::Fill(Fill::Gradient { align: false, .. }) = &layer.content {
+    // A light flare is placed on the canvas whatever its masks reveal.
+    if let LayerContent::Fill(Fill::Gradient { align: false, .. } | Fill::LensFlare(_)) = &layer.content {
         return frame;
     }
     if let Some(m) = &layer.mask

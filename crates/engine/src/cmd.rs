@@ -85,6 +85,7 @@ mod layer_params;
 mod layer_references;
 pub mod layer_xmp_cmds;
 pub mod lens_cmds;
+pub mod lens_flare_cmds;
 pub mod magnetic_cmds;
 pub mod mask_view_cmds;
 pub mod migrate_cmds;

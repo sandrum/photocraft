@@ -23,6 +23,7 @@ use photocraft_raster::Surface;
 
 use crate::bounds;
 
+mod flare;
 mod lower;
 mod planner;
 mod types;

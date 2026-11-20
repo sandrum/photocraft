@@ -309,7 +309,7 @@ impl Paint {
                     frame,
                 }
             }
-            Fill::Pattern { .. } => Paint::None,
+            Fill::Pattern { .. } | Fill::LensFlare(_) => Paint::None,
         }
     }
 

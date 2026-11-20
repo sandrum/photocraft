@@ -34,6 +34,7 @@ fn the_instance_is_made_once() {
 mod bounded_readback;
 mod camera_raw;
 mod device_loss;
+mod lens_flare;
 mod parity;
 mod pipeline_errors;
 mod pipelines;

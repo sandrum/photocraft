@@ -17,6 +17,7 @@ pub mod effects;
 pub mod frame;
 pub mod import_conversion;
 pub mod layer_tree;
+pub mod lens_flare;
 pub mod mode;
 pub mod pattern;
 pub mod slices;
@@ -384,6 +385,9 @@ pub enum Fill {
         #[serde(default)]
         phase: (f32, f32),
     },
+    /// An editable light flare (Layer › New Fill Layer › Light Flare…), rendered as light: its
+    /// alpha is the light's strength, so it is usually blended with Screen.
+    LensFlare(Box<lens_flare::LensFlare>),
 }
 
 impl Fill {
@@ -399,7 +403,7 @@ impl Fill {
         match &mut self {
             Fill::Solid(c) => *c = c.in_mode(mode),
             Fill::Gradient { stops, .. } => stops.iter_mut().for_each(|(_, c)| *c = c.in_mode(mode)),
-            Fill::Pattern { .. } => {}
+            Fill::Pattern { .. } | Fill::LensFlare(_) => {}
         }
         self
     }
@@ -440,6 +444,8 @@ impl std::hash::Hash for Fill {
                 (name, id, link).hash(h);
                 [*scale, *angle, phase.0, phase.1].map(bits).hash(h);
             }
+            // Its debug text names every field; −0.0 and 0.0 hash apart, which only costs a cache miss.
+            Fill::LensFlare(flare) => format!("{flare:?}").hash(h),
         }
     }
 }
