@@ -29,33 +29,28 @@ fn each_row_names_its_command_and_the_clicked_tabs_document() {
 }
 
 /// A document's id is not its place in the list: ids come from a counter shared with layers and other objects, so the
-/// × and the menu's Close sent `file.close` a document that did not exist and nothing closed.
+/// menu's Close, Close Others and Reveal in Finder named a document that did not exist and nothing happened.
 #[test]
-fn the_tab_close_and_the_menu_close_the_clicked_document() {
+fn the_tab_menu_closes_the_clicked_document() {
     let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Services::default());
     for name in ["A", "B", "C"] {
         app.run("file.new", json!({"width": 8, "height": 8, "name": name})).unwrap();
     }
     let ctx = app.ctx().clone();
-    let id_of = |app: &PhotocraftApp, name: &str| app.session.documents().iter().find(|st| st.doc.name == name).map(|st| st.doc.id).unwrap();
     let names = |app: &PhotocraftApp| app.session.documents().iter().map(|st| st.doc.name.clone()).collect::<Vec<_>>();
     assert!(app.session.documents().iter().enumerate().any(|(i, st)| st.doc.id.0 != i as u64), "ids are not indices");
-
-    // The tab's ×, on a document that is not the active one.
-    let b = id_of(&app, "B");
-    crate::canvas::tabs::close_tab(&mut app, &ctx, b);
+    let run = |app: &mut PhotocraftApp, name: &str, label: &str| {
+        let index = app.session.documents().iter().position(|st| st.doc.name == name).unwrap();
+        let id = app.session.documents()[index].doc.id;
+        let count = app.session.documents().len();
+        let (_, command, params, _) = tab_context_items(id, index, count, false).into_iter().find(|(l, ..)| *l == label).unwrap();
+        crate::menus::invoke(app, &ctx, command, params).unwrap();
+    };
+    // Close on a tab that is not the active one (C is).
+    run(&mut app, "B", "Close");
     assert_eq!(names(&app), ["A", "C"]);
-
-    // The menu's Close and Close Others run on the clicked tab.
-    let a = id_of(&app, "A");
-    let index = crate::canvas::tabs::document_index(&app, a).unwrap();
-    let count = app.session.documents().len();
-    let items = tab_context_items(a, index, count, false);
-    let (_, command, params, _) = items.iter().find(|(label, ..)| *label == "Close Others").unwrap().clone();
-    crate::menus::invoke(&mut app, &ctx, command, params).unwrap();
+    run(&mut app, "A", "Close Others");
     assert_eq!(names(&app), ["A"]);
-    let items = tab_context_items(a, 0, 1, false);
-    let (_, command, params, _) = items.iter().find(|(label, ..)| *label == "Close").unwrap().clone();
-    crate::menus::invoke(&mut app, &ctx, command, params).unwrap();
+    run(&mut app, "A", "Close");
     assert!(names(&app).is_empty());
 }

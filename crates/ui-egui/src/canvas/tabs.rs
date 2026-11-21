@@ -27,14 +27,6 @@ pub(crate) enum DocTab {
 #[derive(Clone, Debug, Default)]
 struct TabMenu(Option<(DocId, Pos2)>);
 
-/// Closes the document of the tab whose × was clicked, through the guarded close: a document with unsaved changes gets
-/// the save prompt. `file.close` names its document by its index in the session's list, not by its id.
-pub(crate) fn close_tab(app: &mut PhotocraftApp, ctx: &egui::Context, id: DocId) {
-    if let Some(index) = document_index(app, id) {
-        let _ = crate::menus::invoke(app, ctx, "file.close", json!({"document": index}));
-    }
-}
-
 /// The index of document `id` in the session's document list.
 pub(crate) fn document_index(app: &PhotocraftApp, id: DocId) -> Option<usize> {
     app.session.documents().iter().position(|st| st.doc.id == id)
@@ -92,7 +84,7 @@ pub(super) fn apply(app: &mut PhotocraftApp, ctx: &egui::Context, out: DocumentT
     for event in out.events {
         match event {
             DocumentTabsEvent::Selected(tab) | DocumentTabsEvent::Picked(tab) | DocumentTabsEvent::Activated(tab) => show_tab(app, tab),
-            DocumentTabsEvent::CloseRequested(DocTab::Doc(id)) => close_tab(app, ctx, id),
+            DocumentTabsEvent::CloseRequested(DocTab::Doc(id)) => close_document(app, ctx, id),
             DocumentTabsEvent::CloseRequested(DocTab::Opening(job)) => {
                 let _ = crate::jobs_ui::cancel(app, job);
             }
@@ -122,6 +114,13 @@ pub(super) fn apply(app: &mut PhotocraftApp, ctx: &egui::Context, out: DocumentT
         }
     }
     menu
+}
+
+/// The guarded close shared by the tab strip and a tiled document's title.
+pub(super) fn close_document(app: &mut PhotocraftApp, ctx: &egui::Context, id: DocId) {
+    if let Some(index) = document_index(app, id) {
+        let _ = crate::menus::invoke(app, ctx, "file.close", json!({"document": index}));
+    }
 }
 
 /// A chosen tab: a document tab shows that document, an opening tab its progress.
