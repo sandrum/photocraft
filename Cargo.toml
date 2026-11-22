@@ -12,21 +12,21 @@ rust-version = "1.95"
 [workspace.dependencies]
 # The craft framework through its facade (`craft::ui::…`). The egui `[patch]` below must match
 # `craft::egui_fork::REV` (checked by `cargo xtask ci`).
-craft = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af", default-features = false }
-craft-tracked = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-craft-ui-macros = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
+craft = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34", default-features = false }
+craft-tracked = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+craft-ui-macros = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
 # internal
 photocraft-geom = { path = "crates/geom" }
 photocraft-color = { path = "crates/color" }
 photocraft-raster = { path = "crates/raster" }
 photocraft-doc = { path = "crates/doc" }
 photocraft-ops = { path = "crates/ops" }
-craft-plist = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-craft-psd = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-photocraft-codecs = { package = "craft-image-codecs", git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-photocraft-formats = { package = "craft-file-formats", git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af", features = ["raster-codecs", "pdf", "svg", "ora", "kra", "xcf", "pdn", "raw", "psd", "affinity", "pcraft"] }
+craft-plist = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+craft-psd = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+photocraft-codecs = { package = "craft-image-codecs", git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+photocraft-formats = { package = "craft-file-formats", git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34", features = ["raster-codecs", "pdf", "svg", "ora", "kra", "xcf", "pdn", "raw", "psd", "affinity", "pcraft"] }
 photocraft-raw = { path = "crates/raw" }
-craft-affinity = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
+craft-affinity = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
 photocraft-compose = { path = "crates/compose" }
 photocraft-gpu = { path = "crates/gpu" }
 photocraft-paint = { path = "crates/paint" }
@@ -45,34 +45,36 @@ photocraft-ipp = { path = "crates/ipp" }
 
 # external
 # ICC colour management: the shared crate (replaces crates/cms; craft-libs#779).
-craft-cms = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-craft-print = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
+craft-cms = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+craft-print = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
 # HEIC/HEIF: the shared decoder (replaces crates/heif; craft-libs#784).
-craft-heif = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-craft-pdf = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af", features = ["raster", "write-raster"] }
-craft-xml = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-craft-docpath = { version = "0.1.0", git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-craft-jpeg = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-craft-pcraft-format = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-craft-pcraft-bundle = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-craft-zip = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-craft-ora = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-craft-kra = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-craft-xcf = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-craft-pdn = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
+craft-heif = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+craft-pdf = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34", features = ["raster", "write-raster"] }
+craft-xml = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+craft-docpath = { version = "0.1.0", git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+craft-jpeg = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+craft-pcraft-format = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+craft-pcraft-bundle = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+craft-zip = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+craft-ora = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+craft-kra = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+craft-xcf = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+craft-pdn = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
 # Keep the shared embedded-image validation API until the framework revision includes it.
-craft-svg = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af", features = ["tree-render", "tree-render-system-fonts"] }
-craft-raw = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-craft-tiff = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
+craft-svg = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34", features = ["tree-render", "tree-render-system-fonts"] }
+craft-raw = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+craft-tiff = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
 # Camera-field EXIF reader/writer, shared prerequisite craft-libs#1563.
-craft-metadata = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-craft-crs = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
+craft-metadata = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+craft-crs = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+craft-develop = { git = "https://github.com/storytold/craft-libs", rev = "22a80f2965469c633518f4779d7b414ac15dd5f3" }
+craft-develop-model = { git = "https://github.com/storytold/craft-libs", rev = "22a80f2965469c633518f4779d7b414ac15dd5f3" }
 # Interface translations: lookup, fallback, CLDR plurals and language names over the craft-i18n
 # catalogs that `crates/ui-egui/build.rs` embeds from `CRAFT_I18N_DIR` (storytold/craft-i18n, at
 # the commit in `craft-i18n.rev`). Already in the tree through craft.
-craft-i18n = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
+craft-i18n = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
 # craft-update: app-specific pretend versions apply to startup and manual checks.
-craft-update = { git = "https://github.com/sandrum/craft-libs", version = "=0.1.0", rev = "fc886009f0d56316ce6721a4861437c82e2a12af", features = ["ui"] }
+craft-update = { git = "https://github.com/sandrum/craft-libs", version = "=0.1.0", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34", features = ["ui"] }
 thiserror = "2"
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
@@ -337,30 +339,30 @@ opt-level = 3
 # Keep the complete egui family and native event bridge on reviewed fork commits.
 
 [patch.crates-io]
-krilla = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-hayro = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-hayro-interpret = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-hayro-syntax = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-hayro-jbig2 = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-hayro-cmap = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-hayro-postscript = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-linesweeper = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-vello_common = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-vello_cpu = { git = "https://github.com/sandrum/craft-libs", rev = "fc886009f0d56316ce6721a4861437c82e2a12af" }
-ecolor = { git = "https://github.com/storytold/egui.git", rev = "6525c87923ca47465aac244460fe4b1139349060" }
-emath = { git = "https://github.com/storytold/egui.git", rev = "6525c87923ca47465aac244460fe4b1139349060" }
-epaint = { git = "https://github.com/storytold/egui.git", rev = "6525c87923ca47465aac244460fe4b1139349060" }
-epaint_default_fonts = { git = "https://github.com/storytold/egui.git", rev = "6525c87923ca47465aac244460fe4b1139349060" }
-egui = { git = "https://github.com/storytold/egui.git", rev = "6525c87923ca47465aac244460fe4b1139349060" }
-egui-winit = { git = "https://github.com/storytold/egui.git", rev = "6525c87923ca47465aac244460fe4b1139349060" }
-egui-wgpu = { git = "https://github.com/storytold/egui.git", rev = "6525c87923ca47465aac244460fe4b1139349060" }
-egui_glow = { git = "https://github.com/storytold/egui.git", rev = "6525c87923ca47465aac244460fe4b1139349060" }
-egui_extras = { git = "https://github.com/storytold/egui.git", rev = "6525c87923ca47465aac244460fe4b1139349060" }
-egui_kittest = { git = "https://github.com/storytold/egui.git", rev = "6525c87923ca47465aac244460fe4b1139349060" }
-egui_system_font_provider = { git = "https://github.com/storytold/egui.git", rev = "6525c87923ca47465aac244460fe4b1139349060" }
-eframe = { git = "https://github.com/storytold/egui.git", rev = "6525c87923ca47465aac244460fe4b1139349060" }
-egui_demo_lib = { git = "https://github.com/storytold/egui.git", rev = "6525c87923ca47465aac244460fe4b1139349060" }
-egui_inspection = { git = "https://github.com/storytold/egui.git", rev = "6525c87923ca47465aac244460fe4b1139349060" }
+krilla = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+hayro = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+hayro-interpret = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+hayro-syntax = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+hayro-jbig2 = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+hayro-cmap = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+hayro-postscript = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+linesweeper = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+vello_common = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+vello_cpu = { git = "https://github.com/sandrum/craft-libs", rev = "d056ec3ea9f8c45eee36f03d548734fee4851e34" }
+ecolor = { git = "https://github.com/storytold/egui.git", rev = "f5025284445ea19c35f746d96fc0b75468b3f560" }
+emath = { git = "https://github.com/storytold/egui.git", rev = "f5025284445ea19c35f746d96fc0b75468b3f560" }
+epaint = { git = "https://github.com/storytold/egui.git", rev = "f5025284445ea19c35f746d96fc0b75468b3f560" }
+epaint_default_fonts = { git = "https://github.com/storytold/egui.git", rev = "f5025284445ea19c35f746d96fc0b75468b3f560" }
+egui = { git = "https://github.com/storytold/egui.git", rev = "f5025284445ea19c35f746d96fc0b75468b3f560" }
+egui-winit = { git = "https://github.com/storytold/egui.git", rev = "f5025284445ea19c35f746d96fc0b75468b3f560" }
+egui-wgpu = { git = "https://github.com/storytold/egui.git", rev = "f5025284445ea19c35f746d96fc0b75468b3f560" }
+egui_glow = { git = "https://github.com/storytold/egui.git", rev = "f5025284445ea19c35f746d96fc0b75468b3f560" }
+egui_extras = { git = "https://github.com/storytold/egui.git", rev = "f5025284445ea19c35f746d96fc0b75468b3f560" }
+egui_kittest = { git = "https://github.com/storytold/egui.git", rev = "f5025284445ea19c35f746d96fc0b75468b3f560" }
+egui_system_font_provider = { git = "https://github.com/storytold/egui.git", rev = "f5025284445ea19c35f746d96fc0b75468b3f560" }
+eframe = { git = "https://github.com/storytold/egui.git", rev = "f5025284445ea19c35f746d96fc0b75468b3f560" }
+egui_demo_lib = { git = "https://github.com/storytold/egui.git", rev = "f5025284445ea19c35f746d96fc0b75468b3f560" }
+egui_inspection = { git = "https://github.com/storytold/egui.git", rev = "f5025284445ea19c35f746d96fc0b75468b3f560" }
 winit = { git = "https://github.com/storytold/winit.git", rev = "a517b3846ee8457d84ee4975110bfda6797c44dc" }
 
 

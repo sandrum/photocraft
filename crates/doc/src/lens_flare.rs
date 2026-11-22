@@ -13,7 +13,7 @@
 use serde::{Deserialize, Serialize};
 
 /// The preset library's tabs.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, craft_ui_macros::PlainData)]
 #[serde(rename_all = "camelCase")]
 pub enum FlareCategory {
     /// Long horizontal streaks with oval ghosts, as from anamorphic cinema lenses.
@@ -51,7 +51,7 @@ impl FlareCategory {
 }
 
 /// A lens-dirt or film texture the flare's light shows up on.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, craft_ui_macros::PlainData)]
 #[serde(rename_all = "camelCase")]
 pub enum TextureKind {
     #[default]
@@ -157,7 +157,7 @@ impl TextureKind {
 }
 
 /// The texture layer of a flare (the dialog's Textures tab).
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, craft_ui_macros::PlainData)]
 #[serde(rename_all = "camelCase")]
 pub struct FlareTexture {
     pub kind: TextureKind,
@@ -176,7 +176,7 @@ impl Default for FlareTexture {
 }
 
 /// One optical element of a flare.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, craft_ui_macros::PlainData)]
 #[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum FlareElement {
     /// A soft glow at the source. `falloff` 1 = exponential (wide skirt), 2 = Gaussian (tight).
@@ -253,7 +253,7 @@ pub mod range {
 }
 
 /// A light flare fill: the preset it came from, the user's controls and its elements.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, craft_ui_macros::PlainData)]
 #[serde(rename_all = "camelCase")]
 pub struct LensFlare {
     pub category: FlareCategory,

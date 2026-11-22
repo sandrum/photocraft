@@ -178,7 +178,6 @@ pub const PREVIEWED: &[&str] = &[
     "image.adjustments.replaceColor",
     MATCH_COLOR,
     "image.adjustments.hdrToning",
-    "image.rotation.arbitrary",
     "image.mode.indexedColor",
     "image.mode.bitmap",
     "image.mode.duotone",
@@ -210,6 +209,8 @@ pub fn has_dialog(command: &str) -> bool {
         || matches!(
             command,
             "image.trim"
+                // Rotate Canvas has no preview, as in the reference application (#14462).
+                | "image.rotation.arbitrary"
                 | "view.proofSetup"
                 | "layer.layerStyle.globalLight"
                 | "image.mode.colorTable"
@@ -336,12 +337,6 @@ pub(crate) fn params(app: &mut PhotocraftApp, command: &str, spec: &str) -> Vec<
             if document_derived(command, &p.key) {
                 p = p.not_remembered();
             }
-            // #14465: the row opens from Preferences › General › Image Interpolation on every
-            // opening, so a pick there applies to that opening only; the row stays out of the
-            // remembered values, as the rows above do.
-            if command == "image.rotation.arbitrary" && p.key == "interpolation" {
-                p = p.not_remembered();
-            }
             // Global Light's Altitude takes whole degrees, as its Angle does (#14980).
             if command == "layer.layerStyle.globalLight" && p.key == "altitude" {
                 p = p.decimals(0);
@@ -364,6 +359,10 @@ pub(crate) fn params(app: &mut PhotocraftApp, command: &str, spec: &str) -> Vec<
     }
     if command == "image.mode.colorTable" {
         list.extend(crate::color_table_ui::rows(app));
+    }
+    // Rotate Canvas: one row of its own, without the Interpolation row (#14462).
+    if command == super::rotate_canvas_ui::COMMAND {
+        list = super::rotate_canvas_ui::params();
     }
     rows::custom_rows(app, command, &mut list);
     if command == "edit.colorSettings" {
@@ -421,6 +420,9 @@ pub(crate) fn fields(app: &PhotocraftApp, command: &str, params: &[Param]) -> Di
     if command == crate::bitmap_dialog::COMMAND {
         crate::bitmap_dialog::defaults(app, &mut fields);
     }
+    if command == super::rotate_canvas_ui::COMMAND {
+        super::rotate_canvas_ui::open_values(&mut fields);
+    }
     fields
 }
 
@@ -429,17 +431,9 @@ fn command_defaults(app: &PhotocraftApp, command: &str, params: &[Param]) -> Map
     let mut map = Map::new();
     if command == "image.rotation.arbitrary" {
         straighten_defaults(app, &mut map);
-        // #14465: the reference dialog offers no interpolation choice; its resampling
-        // follows Preferences › General › Image Interpolation (the dropdown itself goes
-        // away with #14462). The *not measured* variants show and act as Bicubic, as the
-        // Free Transform options bar renders them.
-        use photocraft_engine::prefs::Interpolation;
-        let interp = match app.session.prefs().general.image_interpolation {
-            Interpolation::Nearest => "nearest",
-            Interpolation::Bilinear => "bilinear",
-            _ => "bicubic",
-        };
-        map.insert("interpolation".into(), json!(interp));
+        // #14465: the reference dialog offers no interpolation choice, and the dialog has no row
+        // for it (#14462): it sends none, so the command resamples as Preferences › General ›
+        // Image Interpolation says on every run.
     }
     if command == "type.warpText" {
         warp_defaults(app, &mut map);
@@ -553,6 +547,12 @@ fn full_window_size(window: egui::Vec2) -> egui::Vec2 {
     if size.x.is_finite() && size.y.is_finite() { size.max(FULL_WINDOW_MIN) } else { FULL_WINDOW_MIN }
 }
 
+/// The title of `command`'s dialog: [`title_of`] its label, or the dialog's own name where the reference application
+/// gives it one (Arbitrary opens "Rotate Canvas", #14462).
+fn dialog_title(command: &str, label: &str) -> Label {
+    if command == super::rotate_canvas_ui::COMMAND { super::rotate_canvas_ui::title() } else { title_of(label) }
+}
+
 /// The build closure of a command dialog over its values, over the active document's canvas: its droppers, the Blur
 /// Gallery's pins and the preview pane's locator take presses there.
 fn builder(
@@ -561,6 +561,7 @@ fn builder(
     title: Label,
     params: Vec<Param>,
     reset: DialogFields,
+    preview: bool,
 ) -> impl for<'b> Fn(&'b mut DialogFields) -> ParamDialog<'b> + Send + 'static {
     let key = command.to_owned();
     let canvas = app.session.active_index().map(|idx| crate::canvas::document_display::CanvasHost::primary(app, idx).canvas_id());
@@ -572,7 +573,9 @@ fn builder(
             .values(Bind::bound(fields))
             .reset_to(reset.clone())
             .layout(ParamLayout::Stacked)
-            .previews(previews(&key))
+            .previews(preview)
+            // Alt keeps Rotate Canvas's Cancel a Cancel, as in the reference application (#14462).
+            .alt_resets(key != super::rotate_canvas_ui::COMMAND)
             .click_centres(!picks_point)
             .alert_title(tl!("PhotoCraft"));
         if let Some(canvas) = canvas {
@@ -594,6 +597,17 @@ fn builder(
 /// Opens `command`'s schema dialog using the current settings and editing target. The dialog's key
 /// is the command; Match Color captures its destination document and layer.
 pub fn open(app: &mut PhotocraftApp, command: &str) -> Result<DialogId, String> {
+    open_as(app, command, previews(command))
+}
+
+/// [`open`] with the Preview box whether or not `command`'s dialog has one. Rotate Canvas has none (#14462), but the
+/// canvas still places a preview that changes the document's size (#1436); its tests reach that path through here.
+#[doc(hidden)]
+pub fn open_previewing(app: &mut PhotocraftApp, command: &str) -> Result<DialogId, String> {
+    open_as(app, command, true)
+}
+
+fn open_as(app: &mut PhotocraftApp, command: &str, preview: bool) -> Result<DialogId, String> {
     let spec = photocraft_engine::commands::find(command).ok_or_else(|| format!("{command} has no dialog"))?;
     let params = params(app, command, spec.params);
     let fields = fields(app, command, &params);
@@ -607,8 +621,8 @@ pub fn open(app: &mut PhotocraftApp, command: &str) -> Result<DialogId, String> 
     };
     let reset = reset_values(&params, &fields);
     // Photoshop titles the Scale Effects… dialog with the longer name (#14996).
-    let title = if command == SCALE_EFFECTS { Label::from(tl!("Scale Layer Effects")) } else { title_of(spec.label) };
-    let build = builder(app, command, title, params, reset);
+    let title = if command == SCALE_EFFECTS { Label::from(tl!("Scale Layer Effects")) } else { dialog_title(command, spec.label) };
+    let build = builder(app, command, title, params, reset, preview);
     let id = crate::dialogs::params::open_param(app, command, fields, captured, build);
     if command == MATCH_COLOR {
         reconcile_match_color(app);
@@ -628,7 +642,7 @@ pub fn open_with_spec(app: &mut PhotocraftApp, command: &str, label: &str, spec:
         fields.set("target", FieldValue::Json(target));
     }
     let reset = reset_values(&params, &fields);
-    let build = builder(app, command, title_of(label), params, reset);
+    let build = builder(app, command, title_of(label), params, reset, previews(command));
     // PLAN: assumed `open_param_unsaved(app, key, fields, captured, build) -> DialogId` (dialogs-w19): `open_param` without the remember key.
     crate::dialogs::params::open_param_unsaved(app, command, fields, Value::Null, build)
 }
@@ -643,7 +657,7 @@ pub fn open_smart_edit(app: &mut PhotocraftApp, command: &str, recorded: &Map<St
     let reset = reset_values(&params, &base);
     let mut opening = base;
     overlay(&params, recorded, &mut opening);
-    let build = builder(app, command, title_of(spec.label), params, reset);
+    let build = builder(app, command, dialog_title(command, spec.label), params, reset, previews(command));
     // PLAN: assumed `open_param_unsaved`, as in `open_with_spec`.
     Ok(crate::dialogs::params::open_param_unsaved(app, command, opening, target, build))
 }
@@ -669,10 +683,14 @@ pub(crate) fn command_params(command: &str, fields: &DialogFields) -> Value {
         }
     }
     // The exports to files take the JPEG quality only for a JPEG (a quality would make a WebP lossy).
-    if matches!(command, "file.export.artboardsToFiles" | "file.export.layersToFiles" | "file.export.layerCompsToFiles")
-        && map.get("format").and_then(Value::as_str) != Some("jpg")
-    {
+    if matches!(command, "file.export.layersToFiles" | "file.export.layerCompsToFiles") && map.get("format").and_then(Value::as_str) != Some("jpg") {
         map.remove("quality");
+    }
+    // Artboards to Files sends its Name Options only while Include Artboard Name is ticked (#13637), and the chosen
+    // file type's Export Options only while that box is ticked (#13636).
+    if command == "file.export.artboardsToFiles" {
+        crate::menus::view_cmds::strip_artboard_name_options(&mut map);
+        crate::menus::view_cmds::nest_artboard_export_options(&mut map);
     }
     // An emptied embedded LUT is no data: a stored empty `data` would be read over the chosen `lut`.
     if command == "image.adjustments.colorLookup" && map.get("data").and_then(Value::as_str).is_some_and(str::is_empty) {
@@ -705,6 +723,9 @@ pub(crate) fn command_params(command: &str, fields: &DialogFields) -> Value {
     }
     if command == crate::dialogs::image_processor_ui::COMMAND {
         crate::dialogs::image_processor_ui::nest(&mut map);
+    }
+    if command == super::rotate_canvas_ui::COMMAND {
+        super::rotate_canvas_ui::command_params(&mut map);
     }
     params_of(&map)
 }
@@ -1384,6 +1405,9 @@ pub struct FilterPreviewKey {
     pub params: Value,
     pub k: u32,
     pub tool_colors: ([f32; 4], [f32; 4]),
+    /// The scratch read-error generation (`crate::scratch_reads`): a tile that fails to read and recovers changes
+    /// the pixels without a new revision, and a preview computed during the error must not be kept.
+    pub scratch: u64,
 }
 
 #[cfg(test)]
