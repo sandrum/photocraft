@@ -223,7 +223,7 @@ pub enum FlareElement {
 }
 
 impl FlareElement {
-    /// Whether the element sits at the light source (scaled by Source) rather than being a lens
+    /// Whether the element sits at the light source (sized by Source) rather than being a lens
     /// artifact along the axis (scaled by Artifacts).
     pub fn at_source(&self) -> bool {
         match self {
@@ -239,7 +239,7 @@ pub mod range {
     pub const SCALE: (f32, f32) = (0.1, 5.0);
     pub const BRIGHTNESS: (f32, f32) = (0.0, 3.0);
     pub const ASPECT: (f32, f32) = (0.25, 4.0);
-    pub const SOURCE: (f32, f32) = (0.0, 3.0);
+    pub const SOURCE: (f32, f32) = (0.1, 3.0);
     pub const ARTIFACTS: (f32, f32) = (0.0, 3.0);
     pub const ROTATION: (f32, f32) = (-180.0, 180.0);
     pub const HUE: (f32, f32) = (0.0, 360.0);
@@ -268,7 +268,8 @@ pub struct LensFlare {
     pub brightness: f32,
     /// Horizontal stretch of the source's glows (`1` = round).
     pub aspect: f32,
-    /// Strength of the elements at the source (glow, streaks, star, rays).
+    /// Size of the light at the source (glow, streaks, star, rays, wash): `1` = the preset's,
+    /// smaller shrinks it. (Serialized as `sourceGain` for older files.)
     pub source_gain: f32,
     /// Strength of the lens artifacts (ghosts and off-source rings).
     pub artifacts: f32,

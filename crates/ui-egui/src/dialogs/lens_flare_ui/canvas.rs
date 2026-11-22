@@ -48,8 +48,27 @@ pub(crate) struct Thumbs {
     pub(crate) looks: Arc<Vec<egui::TextureHandle>>,
 }
 
-/// Longest side of the pad image (points × 2 for sharp HiDPI).
+/// Longest side of the pad image before the preview is ready.
 const PAD_SIDE: u32 = 360;
+/// Longest side of the dialog's large preview (the image with the flare, as OK leaves it).
+const PREVIEW_SIDE: u32 = 920;
+
+/// The dialog's large preview of `doc` (the document as OK would leave it), rendered once per
+/// `key` and reused while the values don't change.
+pub(crate) fn preview_texture(app: &PhotocraftApp, doc: &photocraft_doc::Document, key: u64) -> egui::TextureHandle {
+    let ctx = app.ctx();
+    let (display, display_key) = crate::canvas::canvas_display(app, doc, None);
+    let key = key ^ display_key.rotate_left(17);
+    let id = egui::Id::unique("lens-flare-preview");
+    if let Some((_, t)) = ctx.data(|d| d.get_temp::<(u64, egui::TextureHandle)>(id)).filter(|(k, _)| *k == key) {
+        return t;
+    }
+    let shown = photocraft_engine::mode_cmds::display_document(doc);
+    let buf = photocraft_compose::thumbnail_buffer(shown.as_ref().unwrap_or(doc), PREVIEW_SIDE);
+    let tex = ctx.load_texture("lens-flare-preview", crate::canvas::display_image(display.as_deref(), &buf), egui::TextureOptions::LINEAR);
+    ctx.data_mut(|d| d.insert_temp(id, (key, tex.clone())));
+    tex
+}
 
 /// The pad and look images for the dialog's target, rendered on the first call for each document
 /// revision and reused (never a composite per frame).

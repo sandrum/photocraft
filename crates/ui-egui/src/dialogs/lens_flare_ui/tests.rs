@@ -47,6 +47,7 @@ fn new_light_flare_opens_the_dialog_previews_and_ok_is_one_step() {
     let (shown, key) = display_doc(&mut app, 0).unwrap();
     let (again, again_key) = display_doc(&mut app, 0).unwrap();
     assert!(Arc::ptr_eq(&shown, &again) && key == again_key, "the preview is cached");
+    assert!(app.framework.dialogs.get::<LightFlareDialog>().unwrap().preview.is_some(), "the dialog shows the image with the flare");
     assert!(shown.layers.len() > before.layers.len());
     assert_eq!(steps(&app), count, "previewing does not edit");
     confirm(&mut app, dialog);
@@ -75,4 +76,48 @@ fn content_options_reopen_the_flare_and_a_canvas_click_moves_the_light() {
     let f = flare(&app, layer);
     assert_eq!(f.preset, "Six Blades", "the same preset keeps its elements");
     assert!((f.source.0 - 0.75).abs() < 1e-4 && (f.source.1 - 0.25).abs() < 1e-4, "the light is where the click was: {:?}", f.source);
+}
+
+/// The dialog covers most of the canvas, so its preview is where the light is placed: a click and
+/// a drag on it move the light there.
+#[test]
+fn a_click_and_a_drag_on_the_preview_move_the_light() {
+    use egui_kittest::Harness;
+    use egui_kittest::kittest::{NodeT, Queryable};
+    let mut app = app();
+    crate::theme::install_fonts(app.ctx());
+    let ctx = app.ctx().clone();
+    crate::menus::invoke(&mut app, &ctx, cmds::CREATE, json!({})).unwrap();
+    let mut h = Harness::builder()
+        .with_context(ctx)
+        .with_size(vec2(1400.0, 1100.0))
+        .build_ui_state(|ui, app: &mut Box<PhotocraftApp>| crate::dialogs::run(app, ui), app);
+    h.run_steps(4);
+    let light = |h: &Harness<'static, Box<PhotocraftApp>>| {
+        let f = &h.state().framework.dialogs.get::<LightFlareDialog>().unwrap().fields;
+        (num(f, "x", f32::NAN), num(f, "y", f32::NAN))
+    };
+    let pad =
+        h.query_all_by_role(egui::accesskit::Role::Slider).find(|n| n.accesskit_node().label().is_some_and(|l| l.starts_with("Light Source"))).unwrap().rect();
+    let (pad_min, size) = (pad.min, pad.size());
+    assert!(size.x >= 400.0, "the preview is large: {size:?}");
+    let at = |fx: f32, fy: f32| pad_min + vec2(size.x * fx, size.y * fy);
+    let (x0, y0) = light(&h);
+    let press = |h: &mut Harness<'static, Box<PhotocraftApp>>, pos, pressed| {
+        h.event(egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() });
+        h.run_steps(2);
+    };
+    h.hover_at(at(0.8, 0.7));
+    press(&mut h, at(0.8, 0.7), true);
+    press(&mut h, at(0.8, 0.7), false);
+    let (x1, y1) = light(&h);
+    assert!(x1 > x0 + 0.3 && y1 > y0 + 0.3, "a click moved the light towards the bottom right: {x0},{y0} -> {x1},{y1}");
+    press(&mut h, at(0.8, 0.7), true);
+    for k in 1..=5 {
+        h.hover_at(at(0.8 - 0.12 * k as f32, 0.7 - 0.1 * k as f32));
+        h.run_steps(1);
+    }
+    press(&mut h, at(0.2, 0.2), false);
+    let (x2, y2) = light(&h);
+    assert!(x2 < x1 - 0.4 && y2 < y1 - 0.3, "a drag carried the light up and left: {x1},{y1} -> {x2},{y2}");
 }

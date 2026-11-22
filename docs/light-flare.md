@@ -17,9 +17,9 @@ final (double-click the layer thumbnail, or Layer › Layer Content Options…).
   the frame in a soft cone `spread` degrees wide, fading over `reach`. Near where it enters, the
   cone opens to a broad half-disc, so the edge glows instead of ending in a point. `chroma` adds a
   faint rainbow fringe where the wash fades, and `angle` (plus the flare's Rotation) turns it. It
-  counts as a source element (scaled by Source).
+  counts as a source element (sized by Source).
 - **Controls** the user changes: light source position, Scale, Brightness, Aspect (horizontal
-  stretch of the source glow), Source (strength of the elements at the light), Artifacts
+  stretch of the source glow), Source (size of the glow, streaks and rays at the light), Artifacts
   (strength of the ghosts), Rotation, and a colour wheel (Hue + Tint).
 - **Texture**: lens dirt or film texture that the flare's light reveals, with Opacity and
   Flip X / Flip Y. All are procedural (no image assets), seeded and evaluated per pixel at a

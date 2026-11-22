@@ -297,7 +297,10 @@ impl Prepared {
         let mut elems = Vec::with_capacity(f.elements.len());
         let mut tex_color = [0.0f32; 3];
         for e in &f.elements {
-            let gain = if e.at_source() { f.source_gain } else { f.artifacts } * f.brightness;
+            // Source sizes the light at the source (glow, streaks, star, rays, wash); Artifacts sets
+            // the lens artifacts' strength; Brightness scales all of it.
+            let (u, ut, gain) = if e.at_source() { (u * f.source_gain, ut * f.source_gain, 1.0) } else { (u, ut, f.artifacts) };
+            let gain = gain * f.brightness;
             let (color, intensity) = match e {
                 FlareElement::Glow { color, intensity, .. }
                 | FlareElement::Streak { color, intensity, .. }
@@ -408,8 +411,8 @@ impl Prepared {
             texture: f.texture,
             canvas: (canvas.x0 as f32, canvas.y0 as f32, cw, ch),
             tex_unit: 1000.0 / diag,
-            tex_radius: 380.0 * u,
-            tex_color: tex_color.map(|v| v * f.brightness * f.source_gain.max(0.2)),
+            tex_radius: 380.0 * u * f.source_gain,
+            tex_color: tex_color.map(|v| v * f.brightness),
         }
     }
 
@@ -1028,6 +1031,30 @@ mod tests {
             f.texture.flip_x = true;
             assert_ne!(render(&f, c, c), seen[seen.len() - 1], "{kind:?} flips");
         }
+    }
+    /// Source sizes the light at the source: a smaller one lights less of the frame around the
+    /// source, without dimming the source itself; Brightness dims all of it.
+    #[test]
+    fn source_shrinks_the_light_and_brightness_dims_it() {
+        let rect = Rect::new(0, 0, 200, 120);
+        let mut f = photocraft_doc::lens_flare::preset("Sun Burst").unwrap().flare();
+        f.source = (0.5, 0.5);
+        f.artifacts = 0.0;
+        let lum = |f: &LensFlare| -> (f32, f32) {
+            let px = render(f, rect, rect);
+            let l = |p: &[f32; 4]| (p[0] + p[1] + p[2]) * p[3];
+            (l(&px[60 * 200 + 100]), px.iter().map(l).sum())
+        };
+        let (centre, total) = lum(&f);
+        let mut small = f.clone();
+        small.source_gain = 0.3;
+        let (small_centre, small_total) = lum(&small);
+        assert!(small_total < total * 0.6, "a smaller source lights less: {small_total} vs {total}");
+        assert!(small_centre > centre * 0.7, "and stays as bright at the light: {small_centre} vs {centre}");
+        let mut dim = f.clone();
+        dim.brightness = 0.3;
+        let (_, dim_total) = lum(&dim);
+        assert!(dim_total < total * 0.6, "Brightness dims the light: {dim_total} vs {total}");
     }
 }
 
