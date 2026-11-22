@@ -9,7 +9,7 @@
 //! nothing. The fields are the command's params, so `ui.dialog.set` / `ui.dialog.confirm` drive it.
 //!
 //! While the dialog is on top a click or drag on the image places the light (`canvas_input`'s
-//! `FlareLight` pick).
+//! `FlareLight` pick): the dialog lets that press through its modal layer to the document's canvas.
 
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -17,7 +17,7 @@ use std::sync::Arc;
 use craft::behavior::ColumnWidth;
 use craft::ui::buttons::Button;
 use craft::ui::choice::{Checkbox, Segmented};
-use craft::ui::contract::{Bind, Entry, Gap, Props as _, Show as _, ShowContainer as _};
+use craft::ui::contract::{Bind, CanvasGesture, Entry, Gap, Props as _, Sampler as _, Show as _, ShowContainer as _};
 use craft::ui::dialog::{DialogId, DialogResult, DialogStack, StackDialog, dialog_id};
 use craft::ui::display::{Divider, Text};
 use craft::ui::form::SliderField;
@@ -99,6 +99,8 @@ pub(crate) struct LightFlareDialog {
     thumbs: Option<canvas::Thumbs>,
     /// The large preview: the image with the flare, as OK would leave it.
     preview: Option<egui::TextureHandle>,
+    /// The target document's canvas, which takes a click or drag that places the light.
+    canvas: Option<egui::Id>,
 }
 
 impl StackDialog for LightFlareDialog {
@@ -113,9 +115,13 @@ impl StackDialog for LightFlareDialog {
     }
 
     fn show(&mut self, ui: &mut egui::Ui, _stack: &DialogStack) -> Option<DialogResult<Self::Result>> {
-        let LightFlareDialog { fields, aspect, thumbs, preview } = self;
-        let (aspect, thumbs, preview) = (*aspect, thumbs.as_ref(), preview.as_ref());
-        let shown = FormDialog::new(label(tl!("Light Flare")), Bind::bound(fields)).alt_resets(false).show(ui, |ui, _form, f| {
+        let LightFlareDialog { fields, aspect, thumbs, preview, canvas } = self;
+        let (aspect, thumbs, preview, canvas) = (*aspect, thumbs.as_ref(), preview.as_ref(), *canvas);
+        let shown = FormDialog::new(label(tl!("Light Flare")), Bind::bound(fields)).alt_resets(false).show(ui, |ui, form, f| {
+            // A press on the image places the light, as on the preview: the modal layer lets it through to the canvas.
+            if let Some(canvas) = canvas {
+                form.pass_canvas_gesture(canvas, CanvasGesture::PRIMARY);
+            }
             body(ui, f, aspect, thumbs, preview);
             true
         });
@@ -165,7 +171,8 @@ fn start(app: &mut PhotocraftApp, command: &str, target: Value, values: Value) -
     let f = fields(command, target, values, app.light_flare.opens);
     let aspect = app.session.active().map_or(16.0 / 9.0, |st| st.doc.size.width.max(1) as f32 / st.doc.size.height.max(1) as f32);
     let thumbs = canvas::thumbs(app, app.ctx(), &f);
-    app.framework.dialogs.open(LightFlareDialog { fields: f, aspect, thumbs, preview: None })
+    let canvas = app.session.active_index().map(|idx| crate::canvas::document_display::CanvasHost::primary(app, idx).canvas_id());
+    app.framework.dialogs.open(LightFlareDialog { fields: f, aspect, thumbs, preview: None, canvas })
 }
 
 /// Edit the active Light Flare layer (Layer › Layer Content Options…).

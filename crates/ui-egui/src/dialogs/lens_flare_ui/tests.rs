@@ -78,6 +78,37 @@ fn content_options_reopen_the_flare_and_a_canvas_click_moves_the_light() {
     assert!((f.source.0 - 0.75).abs() < 1e-4 && (f.source.1 - 0.25).abs() < 1e-4, "the light is where the click was: {:?}", f.source);
 }
 
+/// The image takes the light as the preview does: with the modal dialog open, a click and a drag on
+/// the canvas reach it and move the light there.
+#[test]
+fn a_click_and_a_drag_on_the_image_move_the_light() {
+    use crate::canvas::testing::{clear_of_dialogs, frame, move_to, press, release};
+    let none = egui::Modifiers::NONE;
+    let mut app = app();
+    let ctx = app.ctx().clone();
+    crate::menus::invoke(&mut app, &ctx, cmds::CREATE, json!({})).unwrap();
+    frame(&mut app);
+    clear_of_dialogs(&mut app, [16.0, 18.0]);
+    let light = |app: &PhotocraftApp| {
+        let f = &app.framework.dialogs.get::<LightFlareDialog>().unwrap().fields;
+        (num(f, "x", f32::NAN), num(f, "y", f32::NAN))
+    };
+    let near = |(x, y): (f32, f32), (wx, wy): (f32, f32)| (x - wx).abs() < 0.03 && (y - wy).abs() < 0.03;
+    // The document is 64 × 36, so the click at (16, 18) is a quarter across and halfway down.
+    move_to(&mut app, [16.0, 18.0], none);
+    press(&mut app, [16.0, 18.0], none);
+    release(&mut app, [16.0, 18.0], none);
+    let clicked = light(&app);
+    assert!(near(clicked, (0.25, 0.5)), "a click on the image placed the light there: {clicked:?}");
+    press(&mut app, [16.0, 18.0], none);
+    move_to(&mut app, [16.0, 24.0], none);
+    move_to(&mut app, [16.0, 30.0], none);
+    release(&mut app, [16.0, 30.0], none);
+    let dragged = light(&app);
+    assert!(near(dragged, (0.25, 30.0 / 36.0)), "a drag on the image carried the light down: {clicked:?} -> {dragged:?}");
+    assert!(app.framework.dialogs.is_open::<LightFlareDialog>(), "placing the light keeps the dialog open");
+}
+
 /// The dialog covers most of the canvas, so its preview is where the light is placed: a click and
 /// a drag on it move the light there.
 #[test]

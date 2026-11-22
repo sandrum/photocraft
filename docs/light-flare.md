@@ -40,14 +40,17 @@ controls and position. Preset names are original; don't reuse names from other f
 
 ## Placing the light
 
-While the dialog is open, click or drag **on the image** to move the light source, as on the
-dialog's position pad (which shows a thumbnail of the document, without the flare being edited).
-The light follows the pointer at any zoom, pan or rotation (screen → document through the canvas
-`ViewXform`), and may sit outside the frame (−1…2 of the canvas size). A crosshair marks the
-source on the canvas. The dialog owns the canvas meanwhile, like Field Blur's pins
-(`canvas::handle_dialog_canvas_input`): no tool paints or selects; Space and the middle button
-still pan. Agents do the same with `ui.pointer` events (document coordinates) while the dialog
-is on top. The pad and Filters thumbnails are rendered once per document revision.
+While the dialog is open, click or drag either **on the dialog's preview** (the image with the
+flare, as OK leaves it, with a marker at the source) or **on the image** itself to move the light
+source; the canvas shows the flare following it. The dialog is modal, so it lets the primary press
+through its modal layer to the document's canvas (`Sampler::pass_canvas_gesture`, as the Pattern
+Fill and Layer Style dialogs do), and the canvas's dialog tool runs the `FlareLight` pick
+(`canvas_input`) instead of the selected tool: no tool paints or selects, the pointer is a
+crosshair, and the wheel, Space and the middle button still scroll, zoom and pan. The light follows
+the pointer at any zoom, pan or rotation (screen → document through the canvas view), and may sit
+outside the frame (−1…2 of the canvas size). Agents do the same with `ui.pointer` events
+(document coordinates) while the dialog is on top. The pad and Filters thumbnails are rendered once
+per document revision.
 
 ## Looks (Filters tab)
 
