@@ -11,7 +11,7 @@ final (double-click the layer thumbnail, or Layer › Layer Content Options…).
 - **Elements** from the preset: glows, anamorphic streaks, star spikes, fine rays, halo rings and
   arcs, ghosts (round or polygonal, with rims and chromatic edges) along the axis from the
   light through the flare's **center point** (the frame centre unless moved), and edge washes.
-  Each is a **part** the Parts tab edits on its own (below).
+  Each is a **part** the parts editor edits on its own (below).
 - **Edge wash** (`FlareElement::Wash`): edge light, as when the sun sits just outside the frame.
   It starts where the line from the frame centre through the source leaves the frame (at most one
   `reach` behind the source; at the source itself when that is outside the frame) and fans into
@@ -19,8 +19,9 @@ final (double-click the layer thumbnail, or Layer › Layer Content Options…).
   cone opens to a broad half-disc, so the edge glows instead of ending in a point. `chroma` adds a
   faint rainbow fringe where the wash fades, and `angle` (plus the flare's Rotation) turns it. It
   counts as a source element (sized by Source).
-- **Controls** the user changes, laid out under the preview so the dialog fits without scrolling:
-  - beside the preview (**Edit**): Brightness, Scale, the layer's **Blend** mode (Screen by default;
+- **Controls** the user changes, laid out so the dialog fits without scrolling (the image itself
+  shows the flare live, so the dialog has no preview of its own):
+  - beside the parts editor (**Edit**): Brightness, Scale, the layer's **Blend** mode (Screen by default;
     also Linear Dodge (Add), Lighten, Color Dodge, Overlay, Soft Light, Normal), **Flip Horizontal**
     and **Flip Vertical** (mirror the whole flare: the light and center point move to the mirrored
     places, the rotation and every part's own angle turn the other way, and the texture flips with
@@ -52,15 +53,15 @@ Window Light, Prism Leak, Low Sun Spill, Blue Hour Leak, Ember Leak, Silver Spil
 Hazy Noon) and large chromatic rims (Rainbow Rim, Ring of Day). A new preset keeps the user's
 controls and position. Preset names are original; don't reuse names from other flare tools.
 
-## Editing the parts (Parts tab)
+## Editing the parts
 
-The library's **Parts** tab lists the flare's parts, numbered, with their kind (Glow, Streak, Star,
+The parts editor, under the library and beside the Edit column, lists the flare's parts, numbered, with their kind (Glow, Streak, Star,
 Rays, Ring, Ghost, Edge Wash) and, for a ring or ghost off the light, where it sits on the axis
 (`Ghost at 0.70`: 0 = the light, 1 = the center point, 2 = as far again). A part's radio selects it
 (click, or the arrow keys); its **Show** check box hides it without losing its settings. Under the
 list: **Add Part** (a menu of the kinds; the new part starts on the light, or half way to the center
-point for a ghost), **Duplicate**, **Delete**, **Move Up** / **Move Down** (the order is only the
-list's: the light adds up the same), the center point's position and **Reset Center**. Beside the
+point for a ghost), **Duplicate**, **Delete**, **Up** / **Down** (the order is only the list's:
+the light adds up the same), the center point's position and **Reset Center**. Beside the
 list, the selected part's own settings and its **Color**:
 
 - Glow: Brightness, Size, Falloff (1 = a wide skirt, 2 = a tight core).
@@ -72,29 +73,30 @@ list, the selected part's own settings and its **Color**:
 
 Sizes are thousandths of the image's diagonal before the flare's Scale; Source Size and Artifacts
 still scale the parts at the light and along the axis. Picking a preset replaces the parts with its
-own (all shown). The flare's own controls (Scale, Brightness, Aspect, Source Size, Artifacts,
-Rotation, Color, Texture) stay below the preview whatever the tab.
+own (all shown). The parts editor and the flare's own controls stay in place whatever the library
+tab.
 
 ## The center point
 
-The axis the ghosts and rings line up on runs from the light through the center point. On the
-preview it is the diamond: drag it, or Alt-click or Alt-drag anywhere on the preview or on the image,
-to move it (−1…2 of the canvas, like the light). Reset Center (Parts tab) puts it back in the middle.
+The axis the ghosts and rings line up on runs from the light through the center point. While the
+dialog is open the image marks it with a diamond (the light with a ring, the axis as a thin line
+through both); Alt-click or Alt-drag on the image moves it (−1…2 of the canvas, like the light).
+Reset Center (under the parts list) puts it back in the middle.
 An edge wash fans into the frame towards it.
 
 ## Placing the light
 
-While the dialog is open, click or drag either **on the dialog's preview** (the image with the
-flare, as OK leaves it, with a marker at the source) or **on the image** itself to move the light
-source; the canvas shows the flare following it. The dialog is modal, so it lets the primary press
+While the dialog is open, click or drag **on the image** to move the light source; the canvas
+shows the flare following it, as OK leaves it, with a ring at the light and a diamond at the center
+point (the dialog tool's `paint`, from `lens_flare_ui::markers`). The dialog is modal, so it lets the primary press
 through its modal layer to the document's canvas (`Sampler::pass_canvas_gesture`, as the Pattern
 Fill and Layer Style dialogs do), and the canvas's dialog tool runs the `FlareLight` pick
 (`canvas_input`) instead of the selected tool: no tool paints or selects, the pointer is a
 crosshair, and the wheel, Space and the middle button still scroll, zoom and pan. The light follows
 the pointer at any zoom, pan or rotation (screen → document through the canvas view), and may sit
 outside the frame (−1…2 of the canvas size). Agents do the same with `ui.pointer` events
-(document coordinates) while the dialog is on top. The pad and Filters thumbnails are rendered once
-per document revision.
+(document coordinates) while the dialog is on top. The Filters thumbnails are rendered once per
+document revision.
 
 ## Looks (Filters tab)
 

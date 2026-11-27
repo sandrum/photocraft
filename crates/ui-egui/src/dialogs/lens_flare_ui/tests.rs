@@ -47,7 +47,6 @@ fn new_light_flare_opens_the_dialog_previews_and_ok_is_one_step() {
     let (shown, key) = display_doc(&mut app, 0).unwrap();
     let (again, again_key) = display_doc(&mut app, 0).unwrap();
     assert!(Arc::ptr_eq(&shown, &again) && key == again_key, "the preview is cached");
-    assert!(app.framework.dialogs.get::<LightFlareDialog>().unwrap().preview.is_some(), "the dialog shows the image with the flare");
     assert!(shown.layers.len() > before.layers.len());
     assert_eq!(steps(&app), count, "previewing does not edit");
     confirm(&mut app, dialog);
@@ -110,50 +109,6 @@ fn a_click_and_a_drag_on_the_image_move_the_light() {
     assert!(app.framework.dialogs.is_open::<LightFlareDialog>(), "placing the light keeps the dialog open");
 }
 
-/// The dialog covers most of the canvas, so its preview is where the light is placed: a click and
-/// a drag on it move the light there.
-#[test]
-fn a_click_and_a_drag_on_the_preview_move_the_light() {
-    use egui_kittest::Harness;
-    use egui_kittest::kittest::{NodeT, Queryable};
-    let mut app = app();
-    crate::theme::install_fonts(app.ctx());
-    let ctx = app.ctx().clone();
-    crate::menus::invoke(&mut app, &ctx, cmds::CREATE, json!({})).unwrap();
-    let mut h = Harness::builder()
-        .with_context(ctx)
-        .with_size(vec2(1400.0, 1100.0))
-        .build_ui_state(|ui, app: &mut Box<PhotocraftApp>| crate::dialogs::run(app, ui), app);
-    h.run_steps(4);
-    let light = |h: &Harness<'static, Box<PhotocraftApp>>| {
-        let f = &h.state().framework.dialogs.get::<LightFlareDialog>().unwrap().fields;
-        (num(f, "x", f32::NAN), num(f, "y", f32::NAN))
-    };
-    let pad =
-        h.query_all_by_role(egui::accesskit::Role::Slider).find(|n| n.accesskit_node().label().is_some_and(|l| l.starts_with("Light Source"))).unwrap().rect();
-    let (pad_min, size) = (pad.min, pad.size());
-    assert!(size.x >= 400.0, "the preview is large: {size:?}");
-    let at = |fx: f32, fy: f32| pad_min + vec2(size.x * fx, size.y * fy);
-    let (x0, y0) = light(&h);
-    let press = |h: &mut Harness<'static, Box<PhotocraftApp>>, pos, pressed| {
-        h.event(egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() });
-        h.run_steps(2);
-    };
-    h.hover_at(at(0.8, 0.7));
-    press(&mut h, at(0.8, 0.7), true);
-    press(&mut h, at(0.8, 0.7), false);
-    let (x1, y1) = light(&h);
-    assert!(x1 > x0 + 0.3 && y1 > y0 + 0.3, "a click moved the light towards the bottom right: {x0},{y0} -> {x1},{y1}");
-    press(&mut h, at(0.8, 0.7), true);
-    for k in 1..=5 {
-        h.hover_at(at(0.8 - 0.12 * k as f32, 0.7 - 0.1 * k as f32));
-        h.run_steps(1);
-    }
-    press(&mut h, at(0.2, 0.2), false);
-    let (x2, y2) = light(&h);
-    assert!(x2 < x1 - 0.4 && y2 < y1 - 0.3, "a drag carried the light up and left: {x1},{y1} -> {x2},{y2}");
-}
-
 /// Alt on the image moves the centre point the lens axis runs through, not the light; OK commits
 /// the dialog's part edits (a part hidden, the centre point moved) as one History step.
 #[test]
@@ -176,6 +131,9 @@ fn alt_on_the_image_moves_the_centre_point_and_part_edits_commit_in_one_step() {
     let f = fields(&app);
     assert!((num(&f, "centerX", 0.0) - 0.75).abs() < 0.03 && (num(&f, "centerY", 0.0) - 0.75).abs() < 0.03, "Alt placed the centre point");
     assert!((num(&f, "x", 0.0) - 0.2).abs() < 1e-3, "and left the light where it was");
+    // the canvas marks both where they now are (64 × 36 document)
+    let (light, center) = markers(&app).expect("markers while the dialog places the light");
+    assert!((light[0] - 0.2 * 64.0).abs() < 0.1 && (center[0] - 48.0).abs() < 2.0 && (center[1] - 27.0).abs() < 2.0, "{light:?} {center:?}");
     // the Parts tab's edits: hide the second part, delete the last
     let mut f = fields(&app);
     parts::edit::toggle(&mut f, 1);
@@ -189,10 +147,10 @@ fn alt_on_the_image_moves_the_centre_point_and_part_edits_commit_in_one_step() {
     assert!((g.center.0 - 0.75).abs() < 0.03 && (g.source.0 - 0.2).abs() < 1e-3);
 }
 
-/// The Parts tab by pointer: a click on a row selects that part (its settings show beside the
-/// list), its eye hides it, and a drag that starts on the preview's diamond moves the centre point.
+/// The parts editor by pointer (beside the Edit column, on every tab): a click on a part's radio
+/// selects it (its settings show beside the list), and its Show check box hides it.
 #[test]
-fn the_parts_tab_selects_hides_and_the_preview_moves_the_centre_point() {
+fn the_parts_editor_selects_and_hides_parts() {
     use egui_kittest::Harness;
     use egui_kittest::kittest::{NodeT, Queryable};
     let mut app = app();
@@ -201,7 +159,7 @@ fn the_parts_tab_selects_hides_and_the_preview_moves_the_centre_point() {
     let ctx = app.ctx().clone();
     crate::menus::invoke(&mut app, &ctx, cmds::CREATE, json!({})).unwrap();
     let dialog = app.framework.dialogs.open_dialogs()[0].id;
-    set(&mut app, dialog, json!({"preset": "Six Blades", "__tab": "parts"}));
+    set(&mut app, dialog, json!({"preset": "Six Blades", "__tab": "streak"}));
     let mut h = Harness::builder()
         .with_context(ctx)
         .with_size(vec2(1400.0, 1100.0))
@@ -233,22 +191,6 @@ fn the_parts_tab_selects_hides_and_the_preview_moves_the_centre_point() {
         let img = h.render().expect("render");
         img.save(std::path::Path::new(&dir).join("light-flare-parts.png")).expect("save");
     }
-    // a drag from the diamond (the frame centre) moves the centre point, not the light
-    let pad = rect_of(&h, egui::accesskit::Role::Slider, "Light Source").unwrap();
-    let light = (num(&fields(&h), "x", 0.0), num(&fields(&h), "y", 0.0));
-    let (from, to) = (pad.center(), pad.min + vec2(pad.width() * 0.7, pad.height() * 0.8));
-    h.hover_at(from);
-    h.event(egui::Event::PointerButton { pos: from, button: egui::PointerButton::Primary, pressed: true, modifiers: Default::default() });
-    h.run_steps(2);
-    for k in 1..=4 {
-        h.hover_at(from + (to - from) * (k as f32 / 4.0));
-        h.run_steps(1);
-    }
-    h.event(egui::Event::PointerButton { pos: to, button: egui::PointerButton::Primary, pressed: false, modifiers: Default::default() });
-    h.run_steps(2);
-    let f = fields(&h);
-    assert!((num(&f, "centerX", 0.0) - 0.7).abs() < 0.03 && (num(&f, "centerY", 0.0) - 0.8).abs() < 0.03, "the centre point followed the drag");
-    assert_eq!((num(&f, "x", 0.0), num(&f, "y", 0.0)), light, "the light stayed");
 }
 
 /// egui's debug warning for an id used twice in one pass ("Second use of widget ID …") never shows
@@ -281,7 +223,7 @@ fn the_dialog_reuses_no_widget_id_in_a_pass() {
         }
         out
     };
-    for tab in ["anamorphic", "parts", "filters", "streak"] {
+    for tab in ["anamorphic", "filters", "streak"] {
         set(h.state_mut(), dialog, json!({"__tab": tab}));
         for _ in 0..6 {
             h.run_steps(1);

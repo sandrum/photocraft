@@ -1,15 +1,13 @@
 //! The Light Flare dialog: Layer › New Fill Layer › Light Flare… and Layer › Layer Content Options
 //! on a Light Flare layer open it. A preset library in four tabs (Anamorphic, Spherical, Sun Flares,
-//! Streaks) with rendered thumbnails, a Parts tab that edits the flare's parts one by one
-//! ([`parts`]), a Filters tab of looks, a position pad for the light source and its center point,
-//! a large preview of the image with the flare that is also the light source pad, the flare's
-//! controls (Scale, Brightness, Aspect, Source Size, Artifacts, Rotation), Hue and Tint, and a
-//! lens-dirt Texture with its Opacity and Flip X / Flip Y, previewed live on the canvas from a
-//! document snapshot. OK runs one engine command (`layer.newFillLayer.lightFlare` for a new layer,
+//! Streaks) with rendered thumbnails and a Filters tab of looks; the flare's parts, edited one by
+//! one ([`parts`]); its own settings (Brightness, Scale, Blend, flips, Texture) and the Light, Shape
+//! and Color grid, all previewed live on the canvas from a document snapshot. OK runs one engine command (`layer.newFillLayer.lightFlare` for a new layer,
 //! `layer.fill.lightFlare.set` for an existing one), so it is one History step; Cancel changes
 //! nothing. The fields are the command's params, so `ui.dialog.set` / `ui.dialog.confirm` drive it.
 //!
-//! While the dialog is on top a click or drag on the image places the light (`canvas_input`'s
+//! While the dialog is on top a click or drag on the image places the light, with Alt the centre
+//! point, and the canvas marks both (`canvas_input`'s
 //! `FlareLight` pick): the dialog lets that press through its modal layer to the document's canvas.
 
 use std::hash::{Hash, Hasher};
@@ -41,7 +39,7 @@ use crate::theme::Tokens;
 
 mod canvas;
 mod parts;
-pub(crate) use canvas::{place_at, placing};
+pub(crate) use canvas::{markers, place_at, placing};
 
 /// The fields that are command params (besides the target in `__params`).
 const KEYS: [&str; 26] = [
@@ -77,15 +75,13 @@ const WIDTH: f32 = 720.0;
 const THUMB: Vec2 = vec2(128.0, 72.0);
 /// A look's thumbnail in the Filters tab: six across.
 const LOOK_THUMB: Vec2 = vec2(108.0, 61.0);
-/// The largest the preview (and light source pad) is drawn.
-const PREVIEW: Vec2 = vec2(450.0, 330.0);
+/// The parts editor's width, beside the Edit column.
+const PARTS_WIDTH: f32 = 450.0;
 /// The height of the library's tabs: two rows of thumbnails and a peek of the third, so the dialog
 /// fits a laptop screen without scrolling.
 const LIBRARY_HEIGHT: f32 = 2.3 * (THUMB.y + 26.0);
-/// The tab that holds the looks (the others are preset categories and the parts).
+/// The tab that holds the looks (the others are preset categories).
 const FILTERS: &str = "filters";
-/// The tab that edits the flare's parts one by one ([`parts`]).
-const PARTS: &str = "parts";
 
 fn label(text: &str) -> Label {
     Label::from(text.to_string())
@@ -112,11 +108,7 @@ pub(crate) struct Preview {
 /// images the app hands it each frame.
 pub(crate) struct LightFlareDialog {
     fields: Map<String, Value>,
-    /// The document's width over its height, for the pad.
-    aspect: f32,
     thumbs: Option<canvas::Thumbs>,
-    /// The large preview: the image with the flare, as OK would leave it.
-    preview: Option<egui::TextureHandle>,
     /// The target document's canvas, which takes a click or drag that places the light.
     canvas: Option<egui::Id>,
 }
@@ -133,20 +125,20 @@ impl StackDialog for LightFlareDialog {
     }
 
     fn show(&mut self, ui: &mut egui::Ui, _stack: &DialogStack) -> Option<DialogResult<Self::Result>> {
-        let LightFlareDialog { fields, aspect, thumbs, preview, canvas } = self;
-        let (aspect, thumbs, preview, canvas) = (*aspect, thumbs.as_ref(), preview.as_ref(), *canvas);
+        let LightFlareDialog { fields, thumbs, canvas } = self;
+        let (thumbs, canvas) = (thumbs.as_ref(), *canvas);
         let shown = FormDialog::new(label(tl!("Light Flare")), Bind::bound(fields)).alt_resets(false).show(ui, |ui, form, f| {
-            // A press on the image places the light, as on the preview: the modal layer lets it through to the canvas.
+            // A press on the image places the light (with Alt, the centre point): the modal layer lets it through to the canvas.
             if let Some(canvas) = canvas {
                 form.pass_canvas_gesture(canvas, CanvasGesture::PRIMARY);
             }
             // craft's measuring run lays the body out once more in some passes to size the dialog: its
-            // egui widgets (thumbnails, scroll areas, the preview pad, the parts list) then take ids of
+            // egui widgets (thumbnails, scroll areas, the parts list) then take ids of
             // their own, or egui flags every one as used twice in the pass (debug builds flash its warning)
             if craft::ui::runtime::measure::active(ui.ctx()) {
-                ui.push_id("light-flare-measuring", |ui| body(ui, f, aspect, thumbs, preview));
+                ui.push_id("light-flare-measuring", |ui| body(ui, f, thumbs));
             } else {
-                body(ui, f, aspect, thumbs, preview);
+                body(ui, f, thumbs);
             }
             true
         });
@@ -202,10 +194,9 @@ fn start(app: &mut PhotocraftApp, command: &str, target: Value, values: Value) -
     app.light_flare.opens += 1;
     app.light_flare.preview = None;
     let f = fields(command, target, values, app.light_flare.opens);
-    let aspect = app.session.active().map_or(16.0 / 9.0, |st| st.doc.size.width.max(1) as f32 / st.doc.size.height.max(1) as f32);
     let thumbs = canvas::thumbs(app, app.ctx(), &f);
     let canvas = app.session.active_index().map(|idx| crate::canvas::document_display::CanvasHost::primary(app, idx).canvas_id());
-    app.framework.dialogs.open(LightFlareDialog { fields: f, aspect, thumbs, preview: None, canvas })
+    app.framework.dialogs.open(LightFlareDialog { fields: f, thumbs, canvas })
 }
 
 /// Edit the active Light Flare layer (Layer › Layer Content Options…).
@@ -297,7 +288,7 @@ fn commit(app: &mut PhotocraftApp, f: &Map<String, Value>) -> Result<(), String>
 }
 
 /// The canvas preview while the dialog is open: the document as OK would leave it. Also hands the
-/// dialog the pad and look images for the current document state.
+/// dialog the look images for the current document state.
 pub(crate) fn display_doc(app: &mut PhotocraftApp, idx: usize) -> Option<(Arc<Document>, u64)> {
     let f = app.framework.dialogs.get::<LightFlareDialog>()?.fields.clone();
     if let Some(thumbs) = canvas::thumbs(app, app.ctx(), &f)
@@ -309,23 +300,12 @@ pub(crate) fn display_doc(app: &mut PhotocraftApp, idx: usize) -> Option<(Arc<Do
     if !target_is_active(app, &f) || app.session.active_index() != Some(idx) {
         return None;
     }
+    let _ = st;
     if unchanged(&f) {
-        // The layer as it is: the dialog's preview shows the document itself.
-        let (doc, key) = (st.doc.clone(), (st.doc.id.0 << 32) ^ st.revision);
-        show_preview(app, &doc, key);
+        // The layer as it is: the canvas shows the document itself.
         return None;
     }
-    let shown = previewed(app, idx, &f)?;
-    show_preview(app, &shown.0, shown.1);
-    Some(shown)
-}
-
-/// Hand the dialog its large preview of `doc`.
-fn show_preview(app: &mut PhotocraftApp, doc: &Document, key: u64) {
-    let tex = canvas::preview_texture(app, doc, key);
-    if let Some(d) = app.framework.dialogs.get_mut::<LightFlareDialog>() {
-        d.preview = Some(tex);
-    }
+    previewed(app, idx, &f)
 }
 
 /// The document as OK would leave it, rendered once per set of values.
@@ -421,9 +401,9 @@ fn cell(ui: &mut egui::Ui, size: Vec2, caption: &str, selected: bool, paint: imp
 /// The room between side-by-side columns, which holds the rule between them.
 const GAP: f32 = 28.0;
 
-/// The preview beside the controls, and the room between them.
-const TOP: [ColumnWidth; 3] = [ColumnWidth::Fixed(PREVIEW.x), ColumnWidth::Fixed(GAP), ColumnWidth::Fixed(WIDTH - PREVIEW.x - GAP)];
-/// The edit grid under the preview: Light, Shape and Color side by side.
+/// The parts editor beside the Edit column, and the room between them.
+const TOP: [ColumnWidth; 3] = [ColumnWidth::Fixed(PARTS_WIDTH), ColumnWidth::Fixed(GAP), ColumnWidth::Fixed(WIDTH - PARTS_WIDTH - GAP)];
+/// The edit grid under the parts: Light, Shape and Color side by side.
 const GRID: [ColumnWidth; 5] = {
     let c = ColumnWidth::Fixed((WIDTH - 2.0 * GAP) / 3.0);
     [c, ColumnWidth::Fixed(GAP), c, ColumnWidth::Fixed(GAP), c]
@@ -513,11 +493,8 @@ fn look_grid(ui: &mut egui::Ui, f: &mut Map<String, Value>, thumbs: Option<&canv
 fn library(ui: &mut egui::Ui, f: &mut Map<String, Value>, thumbs: Option<&canvas::Thumbs>) {
     let tab = f.get("__tab").and_then(Value::as_str).unwrap_or("anamorphic").to_string();
     let current = f.get("preset").and_then(Value::as_str).unwrap_or_default().to_string();
-    let tabs: Vec<Entry<&'static str>> = FlareCategory::ALL
-        .iter()
-        .map(|c| Entry::new(c.id(), tl!(c.label())))
-        .chain([Entry::new(PARTS, tl!("Parts")), Entry::new(FILTERS, tl!("Filters"))])
-        .collect();
+    let tabs: Vec<Entry<&'static str>> =
+        FlareCategory::ALL.iter().map(|c| Entry::new(c.id(), tl!(c.label()))).chain([Entry::new(FILTERS, tl!("Filters"))]).collect();
     let current_tab = tabs.iter().filter_map(|e| e.value().copied()).find(|id| *id == tab).unwrap_or(FILTERS);
     if let Some(&picked) = Segmented::new(tl!("Library"), Bind::given(current_tab), &tabs).show(ui).value() {
         f.insert("__tab".into(), json!(picked));
@@ -525,10 +502,6 @@ fn library(ui: &mut egui::Ui, f: &mut Map<String, Value>, thumbs: Option<&canvas
     ui.add_space(4.0);
     if tab == FILTERS {
         look_grid(ui, f, thumbs);
-        return;
-    }
-    if tab == PARTS {
-        parts::editor(ui, f);
         return;
     }
     let category = FlareCategory::ALL.into_iter().find(|c| c.id() == tab).unwrap_or_default();
@@ -552,64 +525,6 @@ fn library(ui: &mut egui::Ui, f: &mut Map<String, Value>, thumbs: Option<&canvas
             });
         }
     });
-}
-
-/// How close (points) a press on the preview must be to the centre point's marker to drag it.
-const CENTER_GRAB: f32 = 10.0;
-
-/// The large preview, which is also the light source pad: the image with the flare as OK would leave
-/// it, at the canvas's aspect, with a marker the user clicks or drags to place the light, and a
-/// diamond at the centre point the lens axis runs through. A press on the diamond, or with Alt held,
-/// moves the centre point instead of the light.
-fn position_pad(ui: &mut egui::Ui, f: &mut Map<String, Value>, aspect: f32, thumbs: Option<&canvas::Thumbs>, preview: Option<&egui::TextureHandle>) {
-    let t = Tokens::get(ui.ctx());
-    let aspect = aspect.clamp(0.1, 10.0);
-    let (w, h) = if PREVIEW.x / aspect <= PREVIEW.y { (PREVIEW.x, PREVIEW.x / aspect) } else { (PREVIEW.y * aspect, PREVIEW.y) };
-    let (rect, resp) = ui.allocate_exact_size(vec2(w.max(40.0), h.max(40.0)), Sense::click_and_drag());
-    let at = |fx: f32, fy: f32| pos2(rect.left() + fx * rect.width(), rect.top() + fy * rect.height());
-    let center = at(num(f, "centerX", 0.5), num(f, "centerY", 0.5));
-    // what this press moves, decided when it starts: the centre point (on its marker, or with Alt) or the light
-    if resp.is_pointer_button_down_on()
-        && ui.input(|i| i.pointer.primary_pressed())
-        && let Some(p) = ui.input(|i| i.pointer.press_origin())
-    {
-        let alt = ui.input(|i| i.modifiers.alt);
-        f.insert("__grab".into(), json!(if alt || p.distance(center) <= CENTER_GRAB { "center" } else { "light" }));
-    }
-    if (resp.clicked() || resp.dragged() || resp.is_pointer_button_down_on())
-        && let Some(p) = resp.interact_pointer_pos().filter(|p| p.x.is_finite() && p.y.is_finite())
-    {
-        let (kx, ky) = if f.get("__grab").and_then(Value::as_str) == Some("center") { ("centerX", "centerY") } else { ("x", "y") };
-        put(f, kx, (p.x - rect.left()) / rect.width(), range::POSITION, 0.001);
-        put(f, ky, (p.y - rect.top()) / rect.height(), range::POSITION, 0.001);
-    }
-    if !ui.input(|i| i.pointer.primary_down()) {
-        f.remove("__grab");
-    }
-    if ui.is_rect_visible(rect) {
-        let painter = ui.painter_at(rect);
-        painter.rect_filled(rect, t.radius_sm, Color32::from_rgb(14, 16, 24));
-        // The image with the flare; until that is rendered, the image the flare goes on.
-        if let Some(tex) = preview.or(thumbs.map(|t| &t.pad)) {
-            painter.image(tex.id(), rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
-        }
-        let src = at(num(f, "x", 0.3), num(f, "y", 0.3));
-        let center = at(num(f, "centerX", 0.5), num(f, "centerY", 0.5));
-        // The flare's axis from the light through the centre point, where its ghosts fall.
-        let mirror = center + (center - src);
-        painter.line_segment([src, mirror], Stroke::new(1.0, t.text_faint.gamma_multiply(0.5)));
-        // the centre point: a keylined diamond
-        let d = 6.0;
-        let diamond = vec![center + vec2(0.0, -d), center + vec2(d, 0.0), center + vec2(0.0, d), center + vec2(-d, 0.0)];
-        painter.add(egui::Shape::closed_line(diamond.clone(), Stroke::new(3.0, Color32::from_black_alpha(160))));
-        painter.add(egui::Shape::closed_line(diamond, Stroke::new(1.3, Color32::WHITE)));
-        painter.circle_stroke(src, 7.0, Stroke::new(1.5, Color32::from_black_alpha(160)));
-        painter.circle_stroke(src, 7.0, Stroke::new(1.0, Color32::WHITE));
-        painter.circle(src, 2.0, Color32::WHITE, Stroke::new(1.0, t.accent));
-        ui.painter().rect_stroke(rect, t.radius_sm, Stroke::new(1.0, t.field_border), egui::StrokeKind::Inside);
-    }
-    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Slider, true, tl!("Light Source")));
-    resp.on_hover_cursor(egui::CursorIcon::Crosshair);
 }
 
 /// A control slider: label, field, range, default, unit and step.
@@ -650,7 +565,7 @@ const DEFAULTS: [(&str, f64); 13] = [
     ("fringe", 0.0),
 ];
 
-/// The flare's own settings beside the preview: Brightness and Scale, the layer's blend mode, the
+/// The flare's own settings beside the parts: Brightness and Scale, the layer's blend mode, the
 /// flips of the whole flare and Reset, then its Texture.
 fn edit_column(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
     heading(ui, tl!("Edit"));
@@ -702,21 +617,18 @@ fn edit_column(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
     });
 }
 
-/// The dialog body, in order: the library (presets, the flare's parts, looks), then the preview
-/// with the flare's own settings and texture beside it, and under them the edit grid: Light, Shape
-/// and Color.
-fn body(ui: &mut egui::Ui, f: &mut Map<String, Value>, aspect: f32, thumbs: Option<&canvas::Thumbs>, preview: Option<&egui::TextureHandle>) {
+/// The dialog body, in order: the library (presets and looks), then the flare's parts with its own
+/// settings and texture beside them, and under them the edit grid: Light, Shape and Color. The
+/// image itself shows the flare as OK leaves it, and takes the clicks that place the light.
+fn body(ui: &mut egui::Ui, f: &mut Map<String, Value>, thumbs: Option<&canvas::Thumbs>) {
     ui.spacing_mut().item_spacing.y = 6.0;
     ui.set_width(WIDTH);
     library(ui, f, thumbs);
     Divider::horizontal().show(ui);
     columns(ui, &TOP, |i, ui| {
         if i == 0 {
-            heading(ui, tl!("Preview"));
-            position_pad(ui, f, aspect, thumbs, preview);
-            let tip = tl!(
-                "Click or drag on the preview or the image to place the light. Drag the diamond, or Alt-click, to move the center point the ghosts line up through."
-            );
+            parts::editor(ui, f);
+            let tip = tl!("Click or drag on the image to place the light; Alt-click or Alt-drag to move the center point the ghosts line up through.");
             Text::new(tip.to_string()).role(TypeRole::Caption).show(ui);
             return;
         }

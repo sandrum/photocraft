@@ -5,10 +5,11 @@
 //! calls onto those functions in document units.
 
 use craft::behavior::cursor::{Cursor, PaintedCursor};
+use craft::behavior::kurbo::Point;
 use craft::behavior::value::CancelReason;
 use craft::keymap::Mods;
 use craft::ui::canvas::{CanvasTool, ToolAction, ToolContext, ToolPath, ToolPointer};
-use craft::ui::primitives::Draw;
+use craft::ui::primitives::{Draw, PaintShape, StrokeColor, StrokeWidth};
 
 use super::{FamilyTool, ToolScope};
 use crate::canvas::document_display::CanvasHost;
@@ -168,7 +169,27 @@ impl CanvasTool for DialogTool<'_> {
         self.state.press.is_some() && matches!(self.pick, DialogPick::PatternPhase | DialogPick::ShadowDrag | DialogPick::GradientDrag | DialogPick::FlareLight)
     }
 
-    fn paint(&self, _draw: &Draw<'_>, _cx: &ToolContext<'_>) {}
+    /// While the Light Flare dialog places its light: a ring at the light, a diamond at the centre
+    /// point and the axis the ghosts line up on through it, keylined so they show on any image.
+    fn paint(&self, draw: &Draw<'_>, cx: &ToolContext<'_>) {
+        if !matches!(self.pick, DialogPick::FlareLight) {
+            return;
+        }
+        let Some((light, center)) = self.scope.with_app(|app| crate::lens_flare_ui::markers(app)) else { return };
+        let (Some(space), Some(style)) = (cx.space(), cx.style()) else { return };
+        let at = |p: [f64; 2]| space.view.to_screen(Point::new(p[0], p[1]));
+        let (l, c) = (at(light), at(center));
+        let mirror = c + (c - l);
+        let d = 7.0;
+        let diamond = vec![c + egui::vec2(0.0, -d), c + egui::vec2(d, 0.0), c + egui::vec2(0.0, d), c + egui::vec2(-d, 0.0)];
+        let halo = StrokeColor::Theme(style.color(style.tokens.color.overlay.halo));
+        let ink = StrokeColor::Theme(style.color(style.tokens.color.overlay.line));
+        draw.stroke(&PaintShape::Path(vec![l, mirror]), StrokeWidth::Hairline, ink);
+        for (width, color) in [(StrokeWidth::Thick, halo), (StrokeWidth::Thin, ink)] {
+            draw.stroke(&PaintShape::Circle(l, 9.0), width, color);
+            draw.stroke(&PaintShape::Polygon(diamond.clone()), width, color);
+        }
+    }
 
     fn cursor(&self, cx: &ToolContext<'_>) -> Cursor {
         if cx.precise() && samples(self.pick) {

@@ -1,8 +1,9 @@
 //! The Light Flare dialog on the image: while it is the top dialog, a click or drag on the canvas
-//! (`canvas_input`'s `FlareLight` pick) places the light source, as on the dialog's pad.
+//! (`canvas_input`'s `FlareLight` pick) places the light source, or with Alt the centre point, and
+//! the canvas draws a marker at each ([`markers`]).
 //!
-//! Also the images the dialog shows: a downscaled composite of the document for the position pad
-//! and the same image graded by each look for the Filters tab, built once per document revision.
+//! Also the images the Filters tab shows: a downscaled composite of the document graded by each
+//! look, built once per document revision.
 
 use std::sync::Arc;
 
@@ -12,7 +13,7 @@ use photocraft_doc::lens_flare::range;
 use photocraft_engine::lens_flare_cmds::looks;
 use serde_json::{Map, Value};
 
-use super::{LightFlareDialog, put, target_is_active};
+use super::{LightFlareDialog, num, put, target_is_active};
 use crate::PhotocraftApp;
 
 /// Is the Light Flare dialog on top, targeting the active document (so the canvas places its
@@ -40,40 +41,33 @@ pub(crate) fn place_at(app: &mut PhotocraftApp, at: [f64; 2], center: bool) -> b
     true
 }
 
+/// Where the light and the centre point are, in document pixels, while the dialog places them: the
+/// canvas draws a ring at the light, a diamond at the centre point and the axis between them.
+pub(crate) fn markers(app: &PhotocraftApp) -> Option<([f64; 2], [f64; 2])> {
+    if !placing(app) {
+        return None;
+    }
+    let size = app.session.active()?.doc.size;
+    let (w, h) = (f64::from(size.width.max(1)), f64::from(size.height.max(1)));
+    let f = &app.framework.dialogs.get::<LightFlareDialog>()?.fields;
+    let at = |k: &str, d: f32| f64::from(num(f, k, d));
+    Some(([at("x", 0.3) * w, at("y", 0.3) * h], [at("centerX", 0.5) * w, at("centerY", 0.5) * h]))
+}
+
 /// The dialog's images for one document state.
 #[derive(Clone)]
 pub(crate) struct Thumbs {
     key: (u64, u64, u64, u64),
-    /// The document without the flare being edited (and its look), for the position pad.
-    pub(crate) pad: egui::TextureHandle,
-    /// That image graded by each of [`looks::LOOKS`], in order.
+    /// The document without the flare being edited (and its look) graded by each of
+    /// [`looks::LOOKS`], in order.
     pub(crate) looks: Arc<Vec<egui::TextureHandle>>,
 }
 
-/// Longest side of the pad image before the preview is ready.
-const PAD_SIDE: u32 = 360;
-/// Longest side of the dialog's large preview (the image with the flare, as OK leaves it).
-const PREVIEW_SIDE: u32 = 920;
+/// Longest side of the image the looks grade.
+const LOOK_SIDE: u32 = 360;
 
-/// The dialog's large preview of `doc` (the document as OK would leave it), rendered once per
-/// `key` and reused while the values don't change.
-pub(crate) fn preview_texture(app: &PhotocraftApp, doc: &photocraft_doc::Document, key: u64) -> egui::TextureHandle {
-    let ctx = app.ctx();
-    let (display, display_key) = crate::canvas::canvas_display(app, doc, None);
-    let key = key ^ display_key.rotate_left(17);
-    let id = egui::Id::unique("lens-flare-preview");
-    if let Some((_, t)) = ctx.data(|d| d.get_temp::<(u64, egui::TextureHandle)>(id)).filter(|(k, _)| *k == key) {
-        return t;
-    }
-    let shown = photocraft_engine::mode_cmds::display_document(doc);
-    let buf = photocraft_compose::thumbnail_buffer(shown.as_ref().unwrap_or(doc), PREVIEW_SIDE);
-    let tex = ctx.load_texture("lens-flare-preview", crate::canvas::display_image(display.as_deref(), &buf), egui::TextureOptions::LINEAR);
-    ctx.data_mut(|d| d.insert_temp(id, (key, tex.clone())));
-    tex
-}
-
-/// The pad and look images for the dialog's target, rendered on the first call for each document
-/// revision and reused (never a composite per frame).
+/// The look images for the dialog's target, rendered on the first call for each document revision
+/// and reused (never a composite per frame).
 pub(crate) fn thumbs(app: &PhotocraftApp, ctx: &egui::Context, f: &Map<String, Value>) -> Option<Thumbs> {
     let st = app.session.active()?;
     let editing = f.get("__params").and_then(|p| p.get("layer")).and_then(Value::as_u64);
@@ -83,7 +77,7 @@ pub(crate) fn thumbs(app: &PhotocraftApp, ctx: &egui::Context, f: &Map<String, V
     if let Some(t) = ctx.data(|d| d.get_temp::<Thumbs>(id)).filter(|t| t.key == key) {
         return Some(t);
     }
-    // The pad shows the image the flare goes on: without the flare being edited or its look.
+    // The looks grade the image the flare goes on: without the flare being edited or its look.
     let mut doc = (*st.doc).clone();
     if let Some(layer) = editing.map(LayerId) {
         let look = looks::find(&doc, layer).map(|(g, _)| g);
@@ -93,9 +87,8 @@ pub(crate) fn thumbs(app: &PhotocraftApp, ctx: &egui::Context, f: &Map<String, V
             }
         }
     }
-    let buf = photocraft_compose::thumbnail_buffer(&doc, PAD_SIDE);
+    let buf = photocraft_compose::thumbnail_buffer(&doc, LOOK_SIDE);
     let options = egui::TextureOptions::LINEAR;
-    let pad = ctx.load_texture("lens-flare-pad", crate::canvas::display_image(display.as_deref(), &buf), options);
     let graded = looks::LOOKS
         .iter()
         .map(|look| {
@@ -106,7 +99,7 @@ pub(crate) fn thumbs(app: &PhotocraftApp, ctx: &egui::Context, f: &Map<String, V
             ctx.load_texture(format!("lens-flare-look-{}", look.id), crate::canvas::display_image(display.as_deref(), &b), options)
         })
         .collect();
-    let t = Thumbs { key, pad, looks: Arc::new(graded) };
+    let t = Thumbs { key, looks: Arc::new(graded) };
     ctx.data_mut(|d| d.insert_temp(id, t.clone()));
     Some(t)
 }

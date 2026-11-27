@@ -1,10 +1,11 @@
-//! The Light Flare dialog's Parts tab: the flare's parts (glows, streaks, stars, rays, rings,
-//! ghosts, edge washes) as a list, and the selected part's own settings beside it.
+//! The Light Flare dialog's parts editor (beside the Edit column, where a preview once was: the image
+//! itself shows the flare live): the flare's parts (glows, streaks, stars, rays, rings, ghosts, edge
+//! washes) as a list, and the selected part's own settings beside it.
 //!
 //! The list: a row per part with its number, kind and (for a part off the light) where it sits on
-//! the lens axis; its radio selects it and its Show check box hides it (kept, adding no light). Under it: Add Part (a menu of the kinds), Duplicate, Delete, Move Up / Move Down, and the
-//! centre point the axis runs through, with Reset Center. Beside it: the selected part's sliders and
-//! colour. Everything edits the dialog's `elements` and `hidden` fields (and `centerX` /
+//! the lens axis; its radio selects it and its Show check box hides it (kept, adding no light).
+//! Under it: Add Part (a menu of the kinds), Duplicate, Delete, Up / Down, and the centre point the
+//! axis runs through, with Reset Center. Beside it: the selected part's sliders and colour. Everything edits the dialog's `elements` and `hidden` fields (and `centerX` /
 //! `centerY`), which OK sends with the other values in one command, so it is one History step.
 
 use craft::ui::buttons::Button;
@@ -18,14 +19,16 @@ use serde_json::{Map, Value, json};
 
 use super::{columns, heading, label, num, put};
 
-/// The list beside the selected part's settings.
+/// The list beside the selected part's settings, in the editor's column.
 const LAYOUT: [craft::behavior::ColumnWidth; 3] = [
-    craft::behavior::ColumnWidth::Fixed(270.0),
+    craft::behavior::ColumnWidth::Fixed(LIST_WIDTH),
     craft::behavior::ColumnWidth::Fixed(super::GAP),
-    craft::behavior::ColumnWidth::Fixed(super::WIDTH - 270.0 - super::GAP),
+    craft::behavior::ColumnWidth::Fixed(super::PARTS_WIDTH - LIST_WIDTH - super::GAP),
 ];
-/// The tab's height, as the preset grid's.
-const HEIGHT: f32 = super::LIBRARY_HEIGHT;
+const LIST_WIDTH: f32 = 215.0;
+/// The tallest the list scrolls in, and the selected part's settings.
+const LIST_HEIGHT: f32 = 170.0;
+const SETTINGS_HEIGHT: f32 = 330.0;
 
 /// The dialog's parts.
 pub(super) fn parts(f: &Map<String, Value>) -> Vec<Value> {
@@ -230,7 +233,7 @@ fn list(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
     let h = hidden(f);
     let sel = selected(f);
     let mut toggled = None;
-    egui::ScrollArea::vertical().id_salt("lens-flare-parts").max_height(HEIGHT - 96.0).auto_shrink([false, true]).show(ui, |ui| {
+    egui::ScrollArea::vertical().id_salt("lens-flare-parts").max_height(LIST_HEIGHT).auto_shrink([false, true]).show(ui, |ui| {
         if p.is_empty() {
             Text::new(tl!("No parts: add one below.").to_string()).role(TypeRole::Caption).show(ui);
             return;
@@ -284,37 +287,35 @@ fn actions(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
                 edit::duplicate(f, sel);
             }
         });
+    });
+    ui.horizontal(|ui| {
         ui.add_enabled_ui(n > 0, |ui| {
             if Button::new(label(tl!("Delete"))).show(ui).clicked() {
                 edit::delete(f, sel);
             }
         });
-    });
-    ui.horizontal(|ui| {
         ui.add_enabled_ui(sel > 0, |ui| {
-            if Button::new(label(tl!("Move Up"))).show(ui).clicked() {
+            if Button::new(label(tl!("Up"))).tooltip(label(tl!("Move the part up the list"))).show(ui).clicked() {
                 edit::shift(f, sel, true);
             }
         });
         ui.add_enabled_ui(sel + 1 < n, |ui| {
-            if Button::new(label(tl!("Move Down"))).show(ui).clicked() {
+            if Button::new(label(tl!("Down"))).tooltip(label(tl!("Move the part down the list"))).show(ui).clicked() {
                 edit::shift(f, sel, false);
             }
         });
     });
-    ui.horizontal(|ui| {
-        let (cx, cy) = (num(f, "centerX", 0.5), num(f, "centerY", 0.5));
-        Text::new(crate::i18n::fmt(tl!("Center point: {x}, {y}"), &[("x", &format!("{cx:.2}")), ("y", &format!("{cy:.2}"))])).show(ui);
-        ui.add_enabled_ui((cx - 0.5).abs() > 1e-4 || (cy - 0.5).abs() > 1e-4, |ui| {
-            if Button::new(label(tl!("Reset Center"))).show(ui).clicked() {
-                put(f, "centerX", 0.5, range::POSITION, 0.001);
-                put(f, "centerY", 0.5, range::POSITION, 0.001);
-            }
-        });
+    let (cx, cy) = (num(f, "centerX", 0.5), num(f, "centerY", 0.5));
+    Text::new(crate::i18n::fmt(tl!("Center point: {x}, {y}"), &[("x", &format!("{cx:.2}")), ("y", &format!("{cy:.2}"))])).show(ui);
+    ui.add_enabled_ui((cx - 0.5).abs() > 1e-4 || (cy - 0.5).abs() > 1e-4, |ui| {
+        if Button::new(label(tl!("Reset Center"))).show(ui).clicked() {
+            put(f, "centerX", 0.5, range::POSITION, 0.001);
+            put(f, "centerY", 0.5, range::POSITION, 0.001);
+        }
     });
 }
 
-/// The Parts tab: the list and its actions, and beside them the selected part's settings.
+/// The parts editor: the list and its actions, and beside them the selected part's settings.
 pub(super) fn editor(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
     columns(ui, &LAYOUT, |col, ui| {
         if col == 0 {
@@ -330,7 +331,7 @@ pub(super) fn editor(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
             return;
         };
         heading(ui, &row_text(i, &p[i]));
-        egui::ScrollArea::vertical().id_salt("lens-flare-part-settings").max_height(HEIGHT).auto_shrink([false, true]).show(ui, |ui| {
+        egui::ScrollArea::vertical().id_salt("lens-flare-part-settings").max_height(SETTINGS_HEIGHT).auto_shrink([false, true]).show(ui, |ui| {
             for c in settings(&kind) {
                 part_control(ui, f, i, *c);
             }
