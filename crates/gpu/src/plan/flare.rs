@@ -62,6 +62,8 @@ fn pack(p: &Prepared, quantum: Option<f32>) -> Vec<[f32; ROW]> {
         lens_flare::DITHER_DX as f32,
         lens_flare::DITHER_DY as f32,
     ]);
+    // 24: the Spread tone curve's exponent (1 = none)
+    v[24] = p.inv_spread;
     // Ray tables follow the element records.
     let mut tables = Vec::new();
     let table_start = HEADER + STRIDE * p.elems.len();

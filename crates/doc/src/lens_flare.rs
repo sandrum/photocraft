@@ -201,8 +201,8 @@ pub enum FlareElement {
         #[serde(default)]
         arc: f32,
     },
-    /// A ghost image of the iris on the axis at `t` (0 = the source, 1 = the frame centre, 2 = the
-    /// mirror point). `sides` 0 = round, else a polygon; `rim` brightens its edge; `softness`
+    /// A ghost image of the iris on the axis at `t` (0 = the source, 1 = the flare's centre point,
+    /// the frame centre by default; 2 = as far again). `sides` 0 = round, else a polygon; `rim` brightens its edge; `softness`
     /// blurs it (`0..=1`).
     Ghost { t: f32, radius: f32, intensity: f32, color: [f32; 3], sides: u32, rim: f32, softness: f32, chroma: f32 },
     /// Edge light: a broad soft wash that pours in from the frame edge past the source, as when
@@ -222,7 +222,41 @@ pub enum FlareElement {
     },
 }
 
+/// The kinds of part a flare is made of, in the order the dialog's Add menu lists them: id (as the
+/// element's `kind` serializes) and label.
+pub const PART_KINDS: [(&str, &str); 7] =
+    [("glow", "Glow"), ("streak", "Streak"), ("star", "Star"), ("rays", "Rays"), ("ring", "Ring"), ("ghost", "Ghost"), ("wash", "Edge Wash")];
+
 impl FlareElement {
+    /// A new part of kind `id` (one of [`PART_KINDS`]) with middling settings, as the dialog's Add
+    /// puts down: on the light, or half way to the centre point for a ghost.
+    pub fn new_part(id: &str) -> Option<FlareElement> {
+        const WARM: [f32; 3] = [1.0, 0.85, 0.65];
+        Some(match id {
+            "glow" => glow(60.0, 0.6, WARM),
+            "streak" => streak(600.0, 3.0, 0.4, [0.55, 0.7, 1.0]),
+            "star" => star(6, 200.0, 1.2, 0.3, WHITE, 0.0),
+            "rays" => rays(60, 180.0, 0.2, WARM, 7),
+            "ring" => ring_at(0.0, 160.0, 10.0, 0.12, [0.7, 0.85, 1.0], 0.8),
+            "ghost" => ghost(0.5, 30.0, 0.15, [0.6, 0.8, 1.0]),
+            "wash" => wash(450.0, 40.0, 0.3, WARM, 0.4),
+            _ => return None,
+        })
+    }
+
+    /// The kind's id in [`PART_KINDS`].
+    pub fn kind_id(&self) -> &'static str {
+        match self {
+            FlareElement::Glow { .. } => "glow",
+            FlareElement::Streak { .. } => "streak",
+            FlareElement::Star { .. } => "star",
+            FlareElement::Rays { .. } => "rays",
+            FlareElement::Ring { .. } => "ring",
+            FlareElement::Ghost { .. } => "ghost",
+            FlareElement::Wash { .. } => "wash",
+        }
+    }
+
     /// Whether the element sits at the light source (sized by Source) rather than being a lens
     /// artifact along the axis (scaled by Artifacts).
     pub fn at_source(&self) -> bool {
@@ -244,6 +278,11 @@ pub mod range {
     pub const ROTATION: (f32, f32) = (-180.0, 180.0);
     pub const HUE: (f32, f32) = (0.0, 360.0);
     pub const TINT: (f32, f32) = (0.0, 1.0);
+    pub const SPREAD: (f32, f32) = (0.2, 3.0);
+    pub const SATURATION: (f32, f32) = (0.0, 2.0);
+    pub const SOURCE_BRIGHTNESS: (f32, f32) = (0.0, 2.0);
+    pub const SOFTNESS: (f32, f32) = (0.0, 1.0);
+    pub const FRINGE: (f32, f32) = (-1.0, 1.0);
     /// Position, as a fraction of the canvas; a source may sit outside the frame.
     pub const POSITION: (f32, f32) = (-1.0, 2.0);
     /// Most elements a flare may hold (bounds per-pixel work for hand-written files).
@@ -279,12 +318,57 @@ pub struct LensFlare {
     /// preset's own colours).
     pub hue: f32,
     pub tint: f32,
+    /// How far the light spreads: a tone curve on the flare's light (`1` = as the parts make it;
+    /// lower keeps only the hot core, higher lifts the faint halo and ghosts).
+    #[serde(default = "one")]
+    pub spread: f32,
+    /// Colour saturation of the flare (`0` = white light, `1` = its own colours, `2` = stronger), its
+    /// parts' rainbow edges included.
+    #[serde(default = "one")]
+    pub saturation: f32,
+    /// Strength of the light at the source (glow, streaks, star, rays, wash): `0` leaves only the
+    /// lens artifacts. (Source Size, `source_gain`, sets its size.)
+    #[serde(default = "one")]
+    pub source_brightness: f32,
+    /// Softening of the whole flare (`0` = as made, `1` = soft): thin lines thicken and edges blur.
+    #[serde(default)]
+    pub softness: f32,
+    /// Colour fringing (`-1..1`, `0` = none): the light's red and blue separate, red outward for a
+    /// positive value, inward for a negative one.
+    #[serde(default)]
+    pub fringe: f32,
     #[serde(default)]
     pub texture: FlareTexture,
+    /// The point the lens axis runs through from the light, as a fraction of the canvas: ghosts and
+    /// rings off the light sit on that line at their `t` (1 = this point, 2 = as far again). The
+    /// frame centre unless the user moves it.
+    #[serde(default = "frame_centre")]
+    pub center: (f32, f32),
+    /// The parts (elements) hidden from the render, bit `i` for `elements[i]`; they keep their
+    /// settings so they can be shown again. Not written while every part shows.
+    #[serde(default, skip_serializing_if = "no_bits")]
+    pub hidden: u64,
     pub elements: Vec<FlareElement>,
 }
 
+fn one() -> f32 {
+    1.0
+}
+
+fn frame_centre() -> (f32, f32) {
+    (0.5, 0.5)
+}
+
+fn no_bits(v: &u64) -> bool {
+    *v == 0
+}
+
 impl LensFlare {
+    /// Whether part `i` is hidden from the render.
+    pub fn is_hidden(&self, i: usize) -> bool {
+        i < 64 && self.hidden & (1 << i) != 0
+    }
+
     /// A flare with the default controls around `elements`.
     pub fn new(category: FlareCategory, preset: impl Into<String>, elements: Vec<FlareElement>) -> LensFlare {
         LensFlare {
@@ -299,7 +383,14 @@ impl LensFlare {
             rotation: 0.0,
             hue: 0.0,
             tint: 0.0,
+            spread: 1.0,
+            saturation: 1.0,
+            source_brightness: 1.0,
+            softness: 0.0,
+            fringe: 0.0,
             texture: FlareTexture::default(),
+            center: frame_centre(),
+            hidden: 0,
             elements,
         }
     }
@@ -319,8 +410,16 @@ impl LensFlare {
         self.rotation = fix(self.rotation, range::ROTATION, 0.0);
         self.hue = fix(self.hue.rem_euclid(360.0), range::HUE, 0.0);
         self.tint = fix(self.tint, range::TINT, 0.0);
+        self.spread = fix(self.spread, range::SPREAD, 1.0);
+        self.saturation = fix(self.saturation, range::SATURATION, 1.0);
+        self.source_brightness = fix(self.source_brightness, range::SOURCE_BRIGHTNESS, 1.0);
+        self.softness = fix(self.softness, range::SOFTNESS, 0.0);
+        self.fringe = fix(self.fringe, range::FRINGE, 0.0);
         self.texture.opacity = fix(self.texture.opacity, (0.0, 1.0), 0.6);
+        self.center = (fix(self.center.0, range::POSITION, 0.5), fix(self.center.1, range::POSITION, 0.5));
         self.elements.truncate(range::MAX_ELEMENTS);
+        // only bits for parts the flare has
+        self.hidden &= if self.elements.len() >= 64 { u64::MAX } else { (1u64 << self.elements.len()) - 1 };
         self
     }
 }
@@ -1133,6 +1232,24 @@ mod tests {
                         {"kind":"ghost","t":1.2,"radius":20,"intensity":0.1,"color":[1,1,1],"sides":6,"rim":0.5,"softness":0.2,"chroma":0.3}]}"#;
         let f: LensFlare = serde_json::from_str(old).unwrap();
         assert_eq!((f.elements.len(), f.texture.kind), (3, TextureKind::HexDust));
+        // ... and before the centre point and hidden parts: the frame centre, every part shown
+        assert_eq!((f.center, f.hidden), ((0.5, 0.5), 0));
+        assert!(serde_json::to_value(&f).unwrap().get("hidden").is_none(), "not written while every part shows");
+    }
+
+    #[test]
+    fn every_part_kind_can_be_added_and_hidden_bits_stay_within_the_parts() {
+        let mut f = LensFlare::new(FlareCategory::Spherical, "x", vec![]);
+        for (id, _) in PART_KINDS {
+            let e = FlareElement::new_part(id).unwrap();
+            assert_eq!(e.kind_id(), id);
+            f.elements.push(e);
+        }
+        assert!(FlareElement::new_part("comet").is_none());
+        // bits past the parts (a hand-edited file) are dropped
+        f.hidden = u64::MAX;
+        let f = f.sanitized();
+        assert!((0..PART_KINDS.len()).all(|i| f.is_hidden(i)) && f.hidden.count_ones() as usize == PART_KINDS.len());
     }
 
     #[test]

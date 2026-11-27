@@ -120,6 +120,68 @@ fn bad_params_are_errors_not_panics() {
     assert!(s.execute(PRESETS, json!({"category": "nope"})).is_err());
 }
 
+/// The dialog's part editor: the flare's own parts replace the preset's, a hidden part keeps its
+/// settings and adds no light, and the centre point moves the ghosts; all in one step, and kept by
+/// a `.pcraft` round trip.
+#[test]
+fn parts_hidden_parts_and_the_centre_point_are_edited_in_one_step() {
+    let mut s = session(16);
+    s.execute("edit.fill", json!({"color": "#101010"})).unwrap();
+    let r = s.execute(CREATE, json!({"preset": "Bare Bulb", "x": 0.2, "y": 0.3})).unwrap();
+    let id = r["layer"].as_u64().unwrap();
+    let flare = &r["flare"];
+    assert_eq!((flare["centerX"].as_f64(), flare["centerY"].as_f64()), (Some(0.5), Some(0.5)), "the frame centre by default");
+    let parts = flare["elements"].as_array().unwrap().len();
+    assert!(parts > 0 && flare["hidden"].as_array().is_some_and(Vec::is_empty));
+    // one ghost, alone, half way to the centre point: its light moves with the point
+    let ghost = json!([{"kind": "ghost", "t": 1.0, "radius": 40.0, "intensity": 0.8, "color": [1.0, 1.0, 1.0], "sides": 0, "rim": 0.0, "softness": 0.5, "chroma": 0.0}]);
+    let count = s.active().unwrap().history.entries().len();
+    s.execute(SET, json!({"layer": id, "elements": ghost, "hidden": [], "centerX": 0.8, "centerY": 0.7})).unwrap();
+    assert_eq!(s.active().unwrap().history.entries().len(), count + 1, "one step");
+    let f = flare_of(&s, id);
+    assert_eq!((f.elements.len(), f.center, f.preset.as_str()), (1, (0.8, 0.7), "Bare Bulb"));
+    // the ghost sits at t = 1: on the centre point (80 × 45 canvas → 64, 31.5), not the frame centre
+    let at_point = pixel(&s, 64, 31);
+    let at_middle = pixel(&s, 40, 22);
+    assert!(at_point[0] > at_middle[0] + 0.2, "the ghost follows the centre point: {at_point:?} vs {at_middle:?}");
+    // hidden: no light, its settings kept; shown again it lights the point again
+    s.execute(SET, json!({"layer": id, "hidden": [0]})).unwrap();
+    let f = flare_of(&s, id);
+    assert!(f.is_hidden(0) && f.elements.len() == 1);
+    assert!(pixel(&s, 64, 31)[0] < 0.1, "a hidden part adds nothing");
+    let bytes = photocraft_format::save_to_bytes(&s.active().unwrap().doc, &Default::default()).unwrap();
+    let doc = photocraft_format::load_from_bytes(&bytes).unwrap();
+    let back = doc.layers.iter().find_map(|l| match &l.content {
+        LayerContent::Fill(Fill::LensFlare(b)) => Some((**b).clone()),
+        _ => None,
+    });
+    assert_eq!(back, Some(f), "a .pcraft keeps the parts, the hidden one and the centre point");
+    s.execute(SET, json!({"layer": id, "hidden": []})).unwrap();
+    assert!((pixel(&s, 64, 31)[0] - at_point[0]).abs() < 0.02);
+    // bad parts are errors, not panics, and change nothing
+    for bad in [json!({"elements": [{"kind": "comet"}]}), json!({"elements": 3}), json!({"hidden": [5]}), json!({"centerX": 9.0})] {
+        let mut p = bad.clone();
+        p["layer"] = json!(id);
+        assert!(s.execute(SET, p).is_err(), "{bad}");
+    }
+    assert_eq!(flare_of(&s, id).elements.len(), 1);
+}
+
+/// The Edit grid's tone and colour settings go through the commands, come back in the flare, and
+/// reject values out of range.
+#[test]
+fn spread_saturation_source_brightness_softness_and_fringe_are_set_and_checked() {
+    let mut s = session(8);
+    let id = s.execute(CREATE, json!({"preset": "Bare Bulb", "spread": 0.5, "fringe": -0.4})).unwrap()["layer"].as_u64().unwrap();
+    let r = s.execute(SET, json!({"layer": id, "saturation": 1.6, "sourceBrightness": 0.2, "softness": 0.7})).unwrap();
+    let f = flare_of(&s, id);
+    assert_eq!((f.spread, f.fringe, f.saturation, f.source_brightness, f.softness), (0.5, -0.4, 1.6, 0.2, 0.7));
+    assert_eq!((r["flare"]["spread"].as_f64(), r["flare"]["sourceBrightness"].as_f64().map(|v| v as f32)), (Some(0.5), Some(0.2)));
+    for (k, v) in [("spread", 0.0), ("saturation", 2.5), ("sourceBrightness", -1.0), ("softness", 1.5), ("fringe", 2.0)] {
+        assert!(s.execute(SET, json!({"layer": id, k: v})).is_err(), "{k} = {v}");
+    }
+}
+
 #[test]
 fn presets_lists_every_category() {
     let mut s = Session::new();

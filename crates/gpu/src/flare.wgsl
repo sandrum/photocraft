@@ -460,7 +460,8 @@ fn lf_burn(l_in: vec3<f32>) -> vec3<f32> {
 }
 
 // The flare at document pixel `d` as straight RGBA (lens_flare::render_quantized). Header:
-// 0 element count, 20 has texture, 21 quantum (0: float), 22/23 the dither's second draw offset.
+// 0 element count, 20 has texture, 21 quantum (0: float), 22/23 the dither's second draw offset,
+// 24 the Spread exponent.
 fn lf_pixel(d: vec2<i32>) -> vec4<f32> {
     let x = f32(d.x) + 0.5;
     let y = f32(d.y) + 0.5;
@@ -472,6 +473,11 @@ fn lf_pixel(d: vec2<i32>) -> vec4<f32> {
     }
     if (lf(20) > 0.5) {
         l = lf_texture(x, y, l);
+    }
+    // lens_flare::spread: the light to the power of header 24 (1: none).
+    let g = lf(24);
+    if (g != 1.0) {
+        l = select(vec3(0.0), pow(max(l, vec3(1e-30)), vec3(g)), l > vec3(0.0));
     }
     l = lf_burn(l);
     let q = lf(21);

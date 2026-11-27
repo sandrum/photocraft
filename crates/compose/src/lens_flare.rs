@@ -69,7 +69,7 @@ fn light(flare: &LensFlare, rect: Rect, canvas: Rect, quantum: Option<f32>) -> O
             if texture {
                 prep.texture_light(fx, fy, &mut l);
             }
-            let mut l = burn(l);
+            let mut l = burn(spread(l, prep.inv_spread));
             // Only where the flare adds light: the rest of the layer stays transparent.
             if let Some(q) = quantum
                 && l.iter().any(|v| *v > 0.0)
@@ -235,6 +235,8 @@ pub struct Prepared {
     /// Broad light the texture shows in: radius around the source and its colour.
     pub tex_radius: f32,
     pub tex_color: [f32; 3],
+    /// The tone curve Spread puts on the light: `light^inv_spread` (`1` = none).
+    pub inv_spread: f32,
 }
 
 /// `flare` laid out on `canvas`: its elements' positions, sizes, colours and per-element
@@ -254,6 +256,27 @@ fn hue_rgb(h: f32) -> [f32; 3] {
         4 => [x, 0.0, 1.0],
         _ => [1.0, 0.0, x],
     }
+}
+
+/// How far apart Color Fringe moves the red and blue copies of a part, as a fraction of its distance
+/// from the light at a fringe of 1.
+const FRINGE_SPREAD: f32 = 0.12;
+
+/// `c` with its saturation scaled by `sat` about its luminance (`1` leaves it as it is).
+fn saturated(c: [f32; 3], sat: f32) -> [f32; 3] {
+    if sat == 1.0 {
+        return c;
+    }
+    let l = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    c.map(|v| (l + (v - l) * sat).max(0.0))
+}
+
+/// The Spread tone curve on a pixel's light, before it burns.
+fn spread(l: [f32; 3], inv: f32) -> [f32; 3] {
+    if inv == 1.0 {
+        return l;
+    }
+    l.map(|v| if v > 0.0 { v.powf(inv) } else { 0.0 })
 }
 
 /// `c` moved `tint` of the way towards the hue at the same peak value.
@@ -283,7 +306,8 @@ impl Prepared {
         let u = diag / 1000.0 * f.scale;
         let ut = u * (DETAIL_REF / diag).powf(DETAIL_SHRINK).min(1.0);
         let (sx, sy) = (canvas.x0 as f32 + f.source.0 * cw, canvas.y0 as f32 + f.source.1 * ch);
-        let (mx, my) = (canvas.x0 as f32 + cw / 2.0, canvas.y0 as f32 + ch / 2.0);
+        // the lens axis runs from the light through the centre point (the frame centre by default)
+        let (mx, my) = (canvas.x0 as f32 + f.center.0 * cw, canvas.y0 as f32 + f.center.1 * ch);
         let rot = f.rotation.to_radians();
         let (sin, cos) = rot.sin_cos();
         let aspect = f.aspect;
@@ -296,10 +320,23 @@ impl Prepared {
         };
         let mut elems = Vec::with_capacity(f.elements.len());
         let mut tex_color = [0.0f32; 3];
-        for e in &f.elements {
-            // Source sizes the light at the source (glow, streaks, star, rays, wash); Artifacts sets
-            // the lens artifacts' strength; Brightness scales all of it.
-            let (u, ut, gain) = if e.at_source() { (u * f.source_gain, ut * f.source_gain, 1.0) } else { (u, ut, f.artifacts) };
+        // Colour fringing: each part as three one-colour copies, red grown and blue shrunk about the
+        // light (the other way round for a negative fringe), so the colours part outward from it.
+        let chans: Vec<(f32, [f32; 3])> = if f.fringe.abs() > 1e-4 {
+            let k = f.fringe * FRINGE_SPREAD;
+            vec![(1.0 + k, [1.0, 0.0, 0.0]), (1.0, [0.0, 1.0, 0.0]), (1.0 - k, [0.0, 0.0, 1.0])]
+        } else {
+            vec![(1.0, [1.0; 3])]
+        };
+        let soft = f.softness;
+        for (i, e) in f.elements.iter().enumerate() {
+            if f.is_hidden(i) {
+                continue;
+            }
+            // Source Size sizes the light at the source (glow, streaks, star, rays, wash) and Source
+            // Brightness sets its strength; Artifacts sets the lens artifacts' strength; Brightness
+            // scales all of it.
+            let (u0, ut0, gain) = if e.at_source() { (u * f.source_gain, ut * f.source_gain, f.source_brightness) } else { (u, ut, f.artifacts) };
             let gain = gain * f.brightness;
             let (color, intensity) = match e {
                 FlareElement::Glow { color, intensity, .. }
@@ -311,93 +348,111 @@ impl Prepared {
                 | FlareElement::Wash { color, intensity, .. } => (*color, finite(*intensity, 0.0).clamp(0.0, 4.0)),
             };
             let color = color.map(|c| finite(c, 0.0).clamp(0.0, 1.0));
-            let c = tinted(color, hue, f.tint);
+            let c = saturated(tinted(color, hue, f.tint), f.saturation);
             for k in 0..3 {
                 tex_color[k] += c[k] * intensity;
             }
-            let col = c.map(|v| v * intensity * gain);
-            if col.iter().all(|v| *v <= 0.0) {
+            let col0 = c.map(|v| v * intensity * gain);
+            if col0.iter().all(|v| *v <= 0.0) {
                 continue;
             }
             let pos = |v: f32| finite(v, 0.0).max(0.0);
-            let el = match *e {
-                FlareElement::Glow { radius, falloff, .. } => {
-                    let gauss = falloff >= 1.5;
-                    // A Gaussian glow is a hot core: a detail, so it stays a point of light.
-                    let r = (pos(radius) * if gauss { ut } else { u }).max(0.3);
-                    let reach = r * if gauss { 3.0 } else { 8.5 };
-                    Elem { cx: sx, cy: sy, col, shape: Shape::Glow { r, gauss }, bbox: BBox::around(sx, sy, reach * aspect.max(1.0), reach) }
+            for &(m, mask) in &chans {
+                let col = [col0[0] * mask[0], col0[1] * mask[1], col0[2] * mask[2]];
+                if col.iter().all(|v| *v <= 0.0) {
+                    continue;
                 }
-                FlareElement::Streak { length, thickness, angle, .. } => {
-                    let a = rot + finite(angle, 0.0).to_radians();
-                    let (s, c) = a.sin_cos();
-                    let len = (pos(length) * u * aspect).max(1.0);
-                    let th = (pos(thickness) * ut).max(0.35);
-                    let halo = 3.0 * (pos(thickness) * u).max(0.35);
-                    // Far enough for the skirt to fade out (0.25·e⁻⁹), not end in a visible edge.
-                    let across = (halo * 9.0).max(th * 3.0);
-                    let bbox = BBox::around(sx, sy, (len * c).abs() + (across * s).abs(), (len * s).abs() + (across * c).abs());
-                    Elem { cx: sx, cy: sy, col, shape: Shape::Streak { cos: c, sin: s, len, th, halo }, bbox }
-                }
-                FlareElement::Star { rays, length, thickness, angle, .. } => {
-                    let n = rays.clamp(1, photocraft_doc::lens_flare::range::MAX_RAYS) as f32;
-                    let len = (pos(length) * u).max(1.0);
-                    let th = (pos(thickness) * ut).max(0.35);
-                    let shape = Shape::Star { rot: rot + finite(angle, 0.0).to_radians(), n, len, th };
-                    Elem { cx: sx, cy: sy, col, shape, bbox: BBox::around(sx, sy, len, len) }
-                }
-                FlareElement::Rays { count, length, seed, .. } => {
-                    let len = (pos(length) * u).max(1.0);
-                    let count = count.clamp(1, photocraft_doc::lens_flare::range::MAX_RAYS);
-                    let shape = Shape::Rays { rot, len, th: (0.7 * u).max(0.35), rays: rays(count, len, seed) };
-                    Elem { cx: sx, cy: sy, col, shape, bbox: BBox::around(sx, sy, len, len) }
-                }
-                FlareElement::Ring { t, radius, width, chroma, arc, .. } => {
-                    let (cx, cy) = axis(finite(t, 0.0));
-                    let r = (pos(radius) * u).max(0.5);
-                    let w = (pos(width) * u).max(0.35);
-                    let chroma = finite(chroma, 0.0).clamp(0.0, 2.0);
-                    let reach = r * (1.0 + 0.06 * chroma) + 3.0 * w;
-                    let shape = Shape::Ring { r, w, chroma, arc: finite(arc, 0.0).clamp(0.0, 1.0), dir: away };
-                    Elem { cx, cy, col, shape, bbox: BBox::around(cx, cy, reach, reach) }
-                }
-                FlareElement::Ghost { t, radius, sides, rim, softness, chroma, .. } => {
-                    let (cx, cy) = axis(finite(t, 0.0));
-                    let r = (pos(radius) * u).max(0.5);
-                    let sides = if sides >= 3 { sides.min(16) } else { 0 };
-                    let chroma = finite(chroma, 0.0).clamp(0.0, 2.0);
-                    let shape = Shape::Ghost { r, sides, rot, rim: finite(rim, 0.0).clamp(0.0, 2.0), soft: finite(softness, 0.0).clamp(0.02, 1.0), chroma };
-                    let reach = r * (1.25 + 0.06 * chroma) / if sides > 0 { (std::f32::consts::PI / sides as f32).cos() } else { 1.0 };
-                    Elem { cx, cy, col, shape, bbox: BBox::around(cx, cy, reach, reach) }
-                }
-                FlareElement::Wash { reach, spread, chroma, angle, .. } => {
-                    let reach = (pos(reach) * u).max(1.0);
-                    // Into the frame: from the source towards the centre (or along the rotation
-                    // when the source is the centre), turned by the rotation and the element's angle.
-                    let base = if away != (0.0, 0.0) { away.1.atan2(away.0) } else { 0.0 };
-                    let (s, c) = (base + rot + finite(angle, 0.0).to_radians()).sin_cos();
-                    // The light enters where the line from the source outwards leaves the frame (at
-                    // most a reach behind the source; at the source when it is outside the frame).
-                    let exit = |p: f32, d: f32, lo: f32, hi: f32| {
-                        if d > 1e-6 {
-                            (lo - p) / -d
-                        } else if d < -1e-6 {
-                            (hi - p) / -d
-                        } else {
-                            f32::INFINITY
-                        }
-                    };
-                    let (x0, y0, x1, y1) = (canvas.x0 as f32, canvas.y0 as f32, canvas.x1 as f32, canvas.y1 as f32);
-                    let back = exit(sx, c, x0, x1).min(exit(sy, s, y0, y1)).clamp(0.0, reach * WASH_APEX);
-                    let (cx, cy) = (sx - c * back, sy - s * back);
-                    let spread = finite(spread, 30.0).clamp(1.0, 180.0).to_radians();
-                    let chroma = finite(chroma, 0.0).clamp(0.0, 2.0);
-                    let peak = col[0].max(col[1]).max(col[2]);
-                    let shape = Shape::Wash { dir: (c, s), reach, spread, chroma, peak };
-                    Elem { cx, cy, col, shape, bbox: BBox::around(cx, cy, reach * WASH_REACH, reach * WASH_REACH) }
-                }
-            };
-            elems.push(el);
+                let (u, ut) = (u0 * m, ut0 * m);
+                let axis = |t: f32| axis(t * m);
+                let el = match *e {
+                    FlareElement::Glow { radius, falloff, .. } => {
+                        let gauss = falloff >= 1.5;
+                        // A Gaussian glow is a hot core: a detail, so it stays a point of light.
+                        let r = (pos(radius) * if gauss { ut } else { u }).max(0.3) * (1.0 + soft * if gauss { 3.0 } else { 0.6 });
+                        let reach = r * if gauss { 3.0 } else { 8.5 };
+                        Elem { cx: sx, cy: sy, col, shape: Shape::Glow { r, gauss }, bbox: BBox::around(sx, sy, reach * aspect.max(1.0), reach) }
+                    }
+                    FlareElement::Streak { length, thickness, angle, .. } => {
+                        let a = rot + finite(angle, 0.0).to_radians();
+                        let (s, c) = a.sin_cos();
+                        let len = (pos(length) * u * aspect).max(1.0);
+                        let th = (pos(thickness) * ut).max(0.35) * (1.0 + 6.0 * soft);
+                        let halo = 3.0 * (pos(thickness) * u).max(0.35) * (1.0 + 1.5 * soft);
+                        // Far enough for the skirt to fade out (0.25·e⁻⁹), not end in a visible edge.
+                        let across = (halo * 9.0).max(th * 3.0);
+                        let bbox = BBox::around(sx, sy, (len * c).abs() + (across * s).abs(), (len * s).abs() + (across * c).abs());
+                        Elem { cx: sx, cy: sy, col, shape: Shape::Streak { cos: c, sin: s, len, th, halo }, bbox }
+                    }
+                    FlareElement::Star { rays, length, thickness, angle, .. } => {
+                        let n = rays.clamp(1, photocraft_doc::lens_flare::range::MAX_RAYS) as f32;
+                        let len = (pos(length) * u).max(1.0);
+                        let th = (pos(thickness) * ut).max(0.35) * (1.0 + 4.0 * soft);
+                        let shape = Shape::Star { rot: rot + finite(angle, 0.0).to_radians(), n, len, th };
+                        Elem { cx: sx, cy: sy, col, shape, bbox: BBox::around(sx, sy, len, len) }
+                    }
+                    FlareElement::Rays { count, length, seed, .. } => {
+                        let len = (pos(length) * u).max(1.0);
+                        let count = count.clamp(1, photocraft_doc::lens_flare::range::MAX_RAYS);
+                        let shape = Shape::Rays { rot, len, th: (0.7 * u).max(0.35) * (1.0 + 3.0 * soft), rays: rays(count, len, seed) };
+                        Elem { cx: sx, cy: sy, col, shape, bbox: BBox::around(sx, sy, len, len) }
+                    }
+                    FlareElement::Ring { t, radius, width, chroma, arc, .. } => {
+                        let (cx, cy) = axis(finite(t, 0.0));
+                        let r = (pos(radius) * u).max(0.5);
+                        let w = (pos(width) * u).max(0.35) * (1.0 + 3.0 * soft);
+                        let chroma = (finite(chroma, 0.0) * f.saturation).clamp(0.0, 2.0);
+                        let reach = r * (1.0 + 0.06 * chroma) + 3.0 * w;
+                        let shape = Shape::Ring { r, w, chroma, arc: finite(arc, 0.0).clamp(0.0, 1.0), dir: away };
+                        Elem { cx, cy, col, shape, bbox: BBox::around(cx, cy, reach, reach) }
+                    }
+                    FlareElement::Ghost { t, radius, sides, rim, softness, chroma, .. } => {
+                        let (cx, cy) = axis(finite(t, 0.0));
+                        let r = (pos(radius) * u).max(0.5);
+                        let sides = if sides >= 3 { sides.min(16) } else { 0 };
+                        let chroma = (finite(chroma, 0.0) * f.saturation).clamp(0.0, 2.0);
+                        let shape = Shape::Ghost {
+                            r,
+                            sides,
+                            rot,
+                            rim: finite(rim, 0.0).clamp(0.0, 2.0) * (1.0 - 0.6 * soft),
+                            soft: {
+                                let s = finite(softness, 0.0).clamp(0.02, 1.0);
+                                s + (1.0 - s) * soft
+                            },
+                            chroma,
+                        };
+                        let reach = r * (1.25 + 0.06 * chroma) / if sides > 0 { (std::f32::consts::PI / sides as f32).cos() } else { 1.0 };
+                        Elem { cx, cy, col, shape, bbox: BBox::around(cx, cy, reach, reach) }
+                    }
+                    FlareElement::Wash { reach, spread, chroma, angle, .. } => {
+                        let reach = (pos(reach) * u).max(1.0);
+                        // Into the frame: from the source towards the centre (or along the rotation
+                        // when the source is the centre), turned by the rotation and the element's angle.
+                        let base = if away != (0.0, 0.0) { away.1.atan2(away.0) } else { 0.0 };
+                        let (s, c) = (base + rot + finite(angle, 0.0).to_radians()).sin_cos();
+                        // The light enters where the line from the source outwards leaves the frame (at
+                        // most a reach behind the source; at the source when it is outside the frame).
+                        let exit = |p: f32, d: f32, lo: f32, hi: f32| {
+                            if d > 1e-6 {
+                                (lo - p) / -d
+                            } else if d < -1e-6 {
+                                (hi - p) / -d
+                            } else {
+                                f32::INFINITY
+                            }
+                        };
+                        let (x0, y0, x1, y1) = (canvas.x0 as f32, canvas.y0 as f32, canvas.x1 as f32, canvas.y1 as f32);
+                        let back = exit(sx, c, x0, x1).min(exit(sy, s, y0, y1)).clamp(0.0, reach * WASH_APEX);
+                        let (cx, cy) = (sx - c * back, sy - s * back);
+                        let spread = finite(spread, 30.0).clamp(1.0, 180.0).to_radians();
+                        let chroma = (finite(chroma, 0.0) * f.saturation).clamp(0.0, 2.0);
+                        let peak = col[0].max(col[1]).max(col[2]);
+                        let shape = Shape::Wash { dir: (c, s), reach, spread, chroma, peak };
+                        Elem { cx, cy, col, shape, bbox: BBox::around(cx, cy, reach * WASH_REACH, reach * WASH_REACH) }
+                    }
+                };
+                elems.push(el);
+            }
         }
         let peak = tex_color[0].max(tex_color[1]).max(tex_color[2]);
         let tex_color = if peak > 0.0 { tex_color.map(|v| 0.35 + 0.65 * v / peak) } else { [1.0; 3] };
@@ -413,6 +468,7 @@ impl Prepared {
             tex_unit: 1000.0 / diag,
             tex_radius: 380.0 * u * f.source_gain,
             tex_color: tex_color.map(|v| v * f.brightness),
+            inv_spread: 1.0 / f.spread,
         }
     }
 
@@ -1055,6 +1111,67 @@ mod tests {
         dim.brightness = 0.3;
         let (_, dim_total) = lum(&dim);
         assert!(dim_total < total * 0.6, "Brightness dims the light: {dim_total} vs {total}");
+    }
+
+    /// Light summed over a render, and the share of pixels the flare lights at all.
+    fn totals(f: &LensFlare, rect: Rect) -> (f32, f32) {
+        let px = render(f, rect, rect);
+        let l = |p: &[f32; 4]| (p[0] + p[1] + p[2]) * p[3];
+        let lit = px.iter().filter(|p| p[3] > 0.02).count() as f32 / px.len() as f32;
+        (px.iter().map(l).sum(), lit)
+    }
+
+    /// The edit controls the dialog's Edit grid shows, each by what it visibly does.
+    #[test]
+    fn spread_saturation_source_softness_and_fringe_each_change_the_flare_as_named() {
+        let rect = Rect::new(0, 0, 200, 120);
+        let mut f = photocraft_doc::lens_flare::preset("Sun Burst").unwrap().flare();
+        f.source = (0.3, 0.4);
+        let (total, lit) = totals(&f, rect);
+        // Spread: low keeps the hot core only, high spreads the faint light further
+        let mut tight = f.clone();
+        tight.spread = 0.3;
+        let mut wide = f.clone();
+        wide.spread = 2.5;
+        let (_, tight_lit) = totals(&tight, rect);
+        let (wide_total, _) = totals(&wide, rect);
+        assert!(tight_lit < lit * 0.7, "a tight spread lights less of the frame: {tight_lit} vs {lit}");
+        assert!(wide_total > total * 1.2, "a wide spread lifts the faint light: {wide_total} vs {total}");
+        // Saturation 0: white light (every channel alike)
+        let mut grey = f.clone();
+        grey.hue = 20.0;
+        grey.tint = 1.0;
+        grey.saturation = 0.0;
+        let px = render(&grey, rect, rect);
+        assert!(px.iter().all(|p| (p[0] - p[2]).abs() < 0.02 && (p[0] - p[1]).abs() < 0.02), "no colour left");
+        // Source Brightness 0: the light at the source goes, the ghosts stay
+        let mut lens = photocraft_doc::lens_flare::preset("Prime Classic").unwrap().flare();
+        lens.source = (0.3, 0.4);
+        let (lens_total, _) = totals(&lens, rect);
+        let mut no_source = lens.clone();
+        no_source.source_brightness = 0.0;
+        let (src_total, _) = totals(&no_source, rect);
+        assert!(src_total > 0.0 && src_total < lens_total * 0.5, "the ghosts stay, the source goes: {src_total} vs {lens_total}");
+        let mut no_artifacts = no_source.clone();
+        no_artifacts.artifacts = 0.0;
+        assert_eq!(totals(&no_artifacts, rect).0, 0.0, "with the artifacts off too, nothing is left");
+        // Softness: thin lines thicken, so the light covers more pixels
+        let streak = photocraft_doc::lens_flare::preset("Silver Thread").unwrap().flare();
+        let mut soft = streak.clone();
+        soft.softness = 1.0;
+        assert!(totals(&soft, rect).1 > totals(&streak, rect).1 * 1.2, "softer light covers more");
+        // Color Fringe: red and blue part ways; the sign swaps which side is red
+        let mut out = f.clone();
+        out.saturation = 0.0;
+        out.fringe = 1.0;
+        let mut inward = out.clone();
+        inward.fringe = -1.0;
+        let split = |f: &LensFlare| {
+            let px = render(f, rect, rect);
+            px.iter().map(|p| (p[0] - p[2]) * p[3]).sum::<f32>()
+        };
+        let (a, b) = (split(&out), split(&inward));
+        assert!(a > 0.5 && b < -0.5, "a positive fringe grows the red part, a negative one the blue: {a} {b}");
     }
 }
 

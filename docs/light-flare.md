@@ -10,7 +10,8 @@ final (double-click the layer thumbnail, or Layer › Layer Content Options…).
 
 - **Elements** from the preset: glows, anamorphic streaks, star spikes, fine rays, halo rings and
   arcs, ghosts (round or polygonal, with rims and chromatic edges) along the axis from the
-  light through the frame centre, and edge washes.
+  light through the flare's **center point** (the frame centre unless moved), and edge washes.
+  Each is a **part** the Parts tab edits on its own (below).
 - **Edge wash** (`FlareElement::Wash`): edge light, as when the sun sits just outside the frame.
   It starts where the line from the frame centre through the source leaves the frame (at most one
   `reach` behind the source; at the source itself when that is outside the frame) and fans into
@@ -18,9 +19,22 @@ final (double-click the layer thumbnail, or Layer › Layer Content Options…).
   cone opens to a broad half-disc, so the edge glows instead of ending in a point. `chroma` adds a
   faint rainbow fringe where the wash fades, and `angle` (plus the flare's Rotation) turns it. It
   counts as a source element (sized by Source).
-- **Controls** the user changes: light source position, Scale, Brightness, Aspect (horizontal
-  stretch of the source glow), Source (size of the glow, streaks and rays at the light), Artifacts
-  (strength of the ghosts), Rotation, and a colour wheel (Hue + Tint).
+- **Controls** the user changes, laid out under the preview so the dialog fits without scrolling:
+  - beside the preview (**Edit**): Brightness, Scale, the layer's **Blend** mode (Screen by default;
+    also Linear Dodge (Add), Lighten, Color Dodge, Overlay, Soft Light, Normal), **Flip Horizontal**
+    and **Flip Vertical** (mirror the whole flare: the light and center point move to the mirrored
+    places, the rotation and every part's own angle turn the other way, and the texture flips with
+    it), and Reset;
+  - **Light**: **Spread** (a tone curve on the flare's light: below 1 only the hot core is left,
+    above 1 the faint halo and ghosts spread further), Source Size (size of the glow, streaks and
+    rays at the light), **Source Brightness** (their strength: 0 leaves only the lens artifacts),
+    Artifacts (strength of the ghosts and rings off the light);
+  - **Shape**: Aspect (horizontal stretch of the glow at the light: above 1 the wide anamorphic band,
+    below 1 a tall oval), Rotation, **Softness** (thin lines thicken and edges blur), **Color Fringe**
+    (red and blue separate about the light: each part as three one-colour copies, red larger and blue
+    smaller for a positive value, the other way round for a negative one);
+  - **Color**: **Saturation** (0 = white light, its parts' rainbow edges included; 2 = stronger),
+    and the colour wheel (Hue + Tint).
 - **Texture**: lens dirt or film texture that the flare's light reveals, with Opacity and
   Flip X / Flip Y. All are procedural (no image assets), seeded and evaluated per pixel at a
   bounded cost (at most a 3×3 cell search or a few noise lookups), in units of the canvas
@@ -37,6 +51,36 @@ presets each (96 in all). Sun Flares includes edge-wash looks (Morning Spill, Co
 Window Light, Prism Leak, Low Sun Spill, Blue Hour Leak, Ember Leak, Silver Spill, Forked Light,
 Hazy Noon) and large chromatic rims (Rainbow Rim, Ring of Day). A new preset keeps the user's
 controls and position. Preset names are original; don't reuse names from other flare tools.
+
+## Editing the parts (Parts tab)
+
+The library's **Parts** tab lists the flare's parts, numbered, with their kind (Glow, Streak, Star,
+Rays, Ring, Ghost, Edge Wash) and, for a ring or ghost off the light, where it sits on the axis
+(`Ghost at 0.70`: 0 = the light, 1 = the center point, 2 = as far again). A part's radio selects it
+(click, or the arrow keys); its **Show** check box hides it without losing its settings. Under the
+list: **Add Part** (a menu of the kinds; the new part starts on the light, or half way to the center
+point for a ghost), **Duplicate**, **Delete**, **Move Up** / **Move Down** (the order is only the
+list's: the light adds up the same), the center point's position and **Reset Center**. Beside the
+list, the selected part's own settings and its **Color**:
+
+- Glow: Brightness, Size, Falloff (1 = a wide skirt, 2 = a tight core).
+- Streak: Brightness, Length, Thickness, Angle. Star: Brightness, Points, Length, Thickness, Angle.
+  Rays: Brightness, Count, Length, Variation (another random set of rays).
+- Ring: Brightness, Position, Radius, Width, Rainbow Edge, Half Ring (keeps the side facing away
+  from the light). Ghost: Brightness, Position, Radius, Sides (below 3: round), Rim, Softness,
+  Rainbow Edge. Edge Wash: Brightness, Reach, Spread, Rainbow Edge, Angle.
+
+Sizes are thousandths of the image's diagonal before the flare's Scale; Source Size and Artifacts
+still scale the parts at the light and along the axis. Picking a preset replaces the parts with its
+own (all shown). The flare's own controls (Scale, Brightness, Aspect, Source Size, Artifacts,
+Rotation, Color, Texture) stay below the preview whatever the tab.
+
+## The center point
+
+The axis the ghosts and rings line up on runs from the light through the center point. On the
+preview it is the diamond: drag it, or Alt-click or Alt-drag anywhere on the preview or on the image,
+to move it (−1…2 of the canvas, like the light). Reset Center (Parts tab) puts it back in the middle.
+An edge wash fans into the frame towards it.
 
 ## Placing the light
 
@@ -72,21 +116,27 @@ clipping, stacking several flare layers, and adjustment layers above them as col
 
 The GPU compositor evaluates the flare in a shader (`fs_flare` in `crates/gpu/src/flare.wgsl`):
 `lens_flare::prepare` lays the flare out on the canvas once (positions, sizes, colours, each
-element's constants and each ray's angle, length and strength), `crates/gpu/src/plan/flare.rs`
+element's constants and each ray's angle, length and strength; Saturation, Source Brightness,
+Softness and Color Fringe are settled there, the fringe as three one-colour copies of each part), `crates/gpu/src/plan/flare.rs`
 packs that into the pass's LUT texture, and the shader repeats the CPU's per-pixel arithmetic,
-textures and dither. It matches the CPU within one 8-bit step (`crates/gpu/tests/it/lens_flare.rs`
+textures, the Spread curve (header slot 24) and dither. It matches the CPU within one 8-bit step (`crates/gpu/tests/it/lens_flare.rs`
 checks every preset and texture). CMYK documents still composite flares on the CPU. On an Intel
 Iris Xe a 27 MP render costs about 80 ms per flare on the GPU, against 0.3–1 s on 12 CPU cores.
 
 ## Files
 
-- `.pcraft` saves the flare as data (editable on reopen).
+- `.pcraft` saves the flare as data (editable on reopen), with its parts, the hidden ones and the
+  center point. Files from before the center point load with it at the frame centre.
 - PSD has no flare fill, so export writes the layer as its rendered pixels (with a warning).
 
 ## Commands
 
 - `layer.newFillLayer.lightFlare` `{preset, x, y, scale, brightness, aspect, source, artifacts,
-  rotation, hue, tint, texture, textureOpacity, flipX, flipY, blend, look, path}`
+  rotation, hue, tint, spread (0.2…3), saturation (0…2), sourceBrightness (0…2), softness (0…1),
+  fringe (−1…1), texture, textureOpacity, flipX, flipY, centerX, centerY, elements, hidden, blend,
+  look, path}`: `elements` is the list of parts as the result's `flare.elements` gives them
+  (`{kind: "glow"|"streak"|"star"|"rays"|"ring"|"ghost"|"wash", …}`) and replaces the preset's;
+  `hidden` lists the indices of parts kept but not rendered.
 - `layer.fill.lightFlare.set` `{layer, …the same}`: omitted values keep the layer's.
 - `layer.fill.lightFlare.look` `{layer?, document?, look}`: replace the flare's look (`"none"`
   removes it), one History step → `{layer, look, group}`.

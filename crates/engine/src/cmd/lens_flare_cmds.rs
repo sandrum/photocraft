@@ -30,7 +30,8 @@ fn bad(cmd: &str, msg: impl Into<String>) -> EngineError {
 }
 
 /// The flare `p` asks for, each param optional and defaulting to `base`: `preset` replaces the
-/// elements (keeping the user's controls), the rest set the controls.
+/// elements (keeping the user's controls), then `elements` replaces them with parts of the caller's
+/// (and `hidden` marks parts not rendered); the rest set the controls.
 pub fn edited(cmd: &str, base: &LensFlare, p: &Value) -> Result<LensFlare> {
     let mut f = base.clone();
     if let Some(v) = p.get("preset").filter(|v| !v.is_null()) {
@@ -39,6 +40,26 @@ pub fn edited(cmd: &str, base: &LensFlare, p: &Value) -> Result<LensFlare> {
         f.category = pr.category;
         f.preset = pr.name.into();
         f.elements = pr.elements();
+        f.hidden = 0;
+    }
+    // the parts themselves (the dialog's part editor): replace the elements
+    if let Some(v) = p.get("elements").filter(|v| !v.is_null()) {
+        let els: Vec<lens_flare::FlareElement> =
+            serde_json::from_value(v.clone()).map_err(|e| bad(cmd, format!("`elements` is a list of flare parts: {e}")))?;
+        if els.len() > range::MAX_ELEMENTS {
+            return Err(bad(cmd, format!("a flare has at most {} parts", range::MAX_ELEMENTS)));
+        }
+        f.elements = els;
+        f.hidden = 0;
+    }
+    if let Some(v) = p.get("hidden").filter(|v| !v.is_null()) {
+        let n = f.elements.len();
+        let mut bits = 0u64;
+        for i in v.as_array().ok_or_else(|| bad(cmd, "`hidden` is a list of part indices"))? {
+            let i = i.as_u64().filter(|i| (*i as usize) < n).ok_or_else(|| bad(cmd, format!("`hidden` holds part indices below {n}")))?;
+            bits |= 1 << i;
+        }
+        f.hidden = bits;
     }
     let num = |k: &str, (min, max): (f32, f32)| -> Result<Option<f32>> {
         match p.get(k) {
@@ -62,6 +83,12 @@ pub fn edited(cmd: &str, base: &LensFlare, p: &Value) -> Result<LensFlare> {
     if let Some(v) = num("y", range::POSITION)? {
         f.source.1 = v;
     }
+    if let Some(v) = num("centerX", range::POSITION)? {
+        f.center.0 = v;
+    }
+    if let Some(v) = num("centerY", range::POSITION)? {
+        f.center.1 = v;
+    }
     for (k, r, slot) in [
         ("scale", range::SCALE, &mut f.scale),
         ("brightness", range::BRIGHTNESS, &mut f.brightness),
@@ -71,6 +98,11 @@ pub fn edited(cmd: &str, base: &LensFlare, p: &Value) -> Result<LensFlare> {
         ("rotation", range::ROTATION, &mut f.rotation),
         ("hue", range::HUE, &mut f.hue),
         ("tint", range::TINT, &mut f.tint),
+        ("spread", range::SPREAD, &mut f.spread),
+        ("saturation", range::SATURATION, &mut f.saturation),
+        ("sourceBrightness", range::SOURCE_BRIGHTNESS, &mut f.source_brightness),
+        ("softness", range::SOFTNESS, &mut f.softness),
+        ("fringe", range::FRINGE, &mut f.fringe),
         ("textureOpacity", (0.0, 1.0), &mut f.texture.opacity),
     ] {
         if let Some(v) = num(k, r)? {
@@ -108,10 +140,19 @@ pub fn params_of(f: &LensFlare) -> Value {
         "rotation": f.rotation,
         "hue": f.hue,
         "tint": f.tint,
+        "spread": f.spread,
+        "saturation": f.saturation,
+        "sourceBrightness": f.source_brightness,
+        "softness": f.softness,
+        "fringe": f.fringe,
         "texture": f.texture.kind.id(),
         "textureOpacity": f.texture.opacity,
         "flipX": f.texture.flip_x,
         "flipY": f.texture.flip_y,
+        "centerX": f.center.0,
+        "centerY": f.center.1,
+        "elements": f.elements,
+        "hidden": (0..f.elements.len()).filter(|i| f.is_hidden(*i)).collect::<Vec<_>>(),
     })
 }
 
@@ -283,8 +324,8 @@ pub fn preview(s: &Session, cmd: &str, p: &Value) -> Result<Document> {
     Ok(doc)
 }
 
-const CREATE_PARAMS: &str = r##"{"preset":name="Blue Horizon","x":-1..2?,"y":-1..2? (light source as a fraction of the canvas),"scale":0.1..5?,"brightness":0..3?,"aspect":0.25..4?,"source":0.1..3? (size of the glow/streaks at the light),"artifacts":0..3? (ghost strength),"rotation":-180..180?,"hue":0..360?,"tint":0..1? (colour wheel),"texture":"none|filmGrain|coarseGrain|fineGrain|dust|stretchedSpecks|softOrbs|bigSpots|hexDust|bokehBubbles|raindrops|scratches|smudge|hazyGlass|glassArcs|brushedSteel"?,"textureOpacity":0..1?,"flipX":bool?,"flipY":bool?,"blend":mode name="screen","look":look id="none" (a colour grade above the flare: adjustment layers in a "… Look" group; see layer.fill.lightFlare.presets),"path":"work"|saved path name|{…path}? (the active path: becomes the vector mask; else the selection is the layer mask)} → {layer, flare, look}"##;
-const SET_PARAMS: &str = r##"{"layer":id|name? (default active; a Light Flare layer),"document":id? (reject a stale dialog),"preset":name? (replaces the elements, keeps the controls),"x","y","scale","brightness","aspect","source","artifacts","rotation","hue","tint","texture","textureOpacity","flipX","flipY","blend","look" as for layer.newFillLayer.lightFlare; omitted values keep the layer's} → {layer, flare, look}"##;
+const CREATE_PARAMS: &str = r##"{"preset":name="Blue Horizon","x":-1..2?,"y":-1..2? (light source as a fraction of the canvas),"scale":0.1..5?,"brightness":0..3?,"aspect":0.25..4?,"source":0.1..3? (size of the glow/streaks at the light),"artifacts":0..3? (ghost strength),"rotation":-180..180?,"hue":0..360?,"tint":0..1? (colour wheel),"spread":0.2..3? (tone curve on the light: lower keeps the hot core, higher lifts the faint halo and ghosts; 1 = none),"saturation":0..2?,"sourceBrightness":0..2? (strength of the light at the source),"softness":0..1?,"fringe":-1..1? (red/blue colour fringing about the light),"texture":"none|filmGrain|coarseGrain|fineGrain|dust|stretchedSpecks|softOrbs|bigSpots|hexDust|bokehBubbles|raindrops|scratches|smudge|hazyGlass|glassArcs|brushedSteel"?,"textureOpacity":0..1?,"flipX":bool?,"flipY":bool?,"centerX":-1..2?,"centerY":-1..2? (the point the lens axis runs through from the light; default the frame centre),"elements":[part]? (the flare's parts, as `flare.elements` returns them: {kind:"glow|streak|star|rays|ring|ghost|wash",…}; replaces the preset's),"hidden":[index]? (parts kept but not rendered),"blend":mode name="screen","look":look id="none" (a colour grade above the flare: adjustment layers in a "… Look" group; see layer.fill.lightFlare.presets),"path":"work"|saved path name|{…path}? (the active path: becomes the vector mask; else the selection is the layer mask)} → {layer, flare, look}"##;
+const SET_PARAMS: &str = r##"{"layer":id|name? (default active; a Light Flare layer),"document":id? (reject a stale dialog),"preset":name? (replaces the elements, keeps the controls),"x","y","scale","brightness","aspect","source","artifacts","rotation","hue","tint","spread","saturation","sourceBrightness","softness","fringe","texture","textureOpacity","flipX","flipY","centerX","centerY","elements","hidden","blend","look" as for layer.newFillLayer.lightFlare; omitted values keep the layer's} → {layer, flare, look}"##;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![

@@ -112,7 +112,8 @@ fn alone(flare: LensFlare, size: Size, depth: SampleType) -> Document {
     d
 }
 
-/// `preset`'s flare with its controls varied from its index `i`: source, rotation, aspect, hue.
+/// `preset`'s flare with its controls varied from its index `i`: source, rotation, aspect, hue,
+/// centre point and a hidden part, spread, saturation, source brightness, softness and fringe.
 fn varied(i: usize, preset: &lens_flare::FlarePreset) -> LensFlare {
     let mut f = preset.flare();
     let r = |k: u32| rnd(i as u32 + 1, k);
@@ -125,6 +126,19 @@ fn varied(i: usize, preset: &lens_flare::FlarePreset) -> LensFlare {
         f.hue = 360.0 * r(4);
         f.tint = r(5);
         f.scale = 0.5 + 1.5 * r(6);
+    }
+    if i % 5 == 3 {
+        // a centre point off the frame centre, and one part hidden
+        f.center = (0.2 + 0.6 * r(7), 0.2 + 0.6 * r(8));
+        f.hidden = 1 << (i % f.elements.len().max(1));
+    }
+    if i % 3 == 2 {
+        // the edit grid's tone, colour and softening
+        f.spread = 0.3 + 2.5 * r(9);
+        f.saturation = 2.0 * r(10);
+        f.source_brightness = 2.0 * r(11);
+        f.softness = r(12);
+        f.fringe = -1.0 + 2.0 * r(13);
     }
     f
 }

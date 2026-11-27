@@ -89,7 +89,8 @@ impl CanvasTool for DialogTool<'_> {
                     state.phase = pattern_fill_ui::press(app, at);
                     (state.phase.is_some(), false)
                 }
-                DialogPick::FlareLight => (crate::lens_flare_ui::place_at(app, at), false),
+                // Alt moves the flare's centre point instead of its light.
+                DialogPick::FlareLight => (crate::lens_flare_ui::place_at(app, at, mods.alt), false),
             }
         });
         if !took {
@@ -131,7 +132,7 @@ impl CanvasTool for DialogTool<'_> {
                 }
             }
             DialogPick::FlareLight => {
-                crate::lens_flare_ui::place_at(app, at);
+                crate::lens_flare_ui::place_at(app, at, mods.alt);
             }
             // The pipettes keep sampling while the button is held.
             _ => canvas_input::resample(app, pick, at, mods),

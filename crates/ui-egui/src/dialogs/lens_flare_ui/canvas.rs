@@ -23,17 +23,19 @@ pub(crate) fn placing(app: &PhotocraftApp) -> bool {
     dialogs.get_by_id::<LightFlareDialog>(top).is_some_and(|d| target_is_active(app, &d.fields))
 }
 
-/// Place the light at document point `at` (pixels; outside the frame too, within
-/// `range::POSITION`). Returns whether the dialog took it.
-pub(crate) fn place_at(app: &mut PhotocraftApp, at: [f64; 2]) -> bool {
+/// Place the light (or, with `center`, the centre point the lens axis runs through) at document
+/// point `at` (pixels; outside the frame too, within `range::POSITION`). Returns whether the
+/// dialog took it.
+pub(crate) fn place_at(app: &mut PhotocraftApp, at: [f64; 2], center: bool) -> bool {
     if !placing(app) || !at.iter().all(|v| v.is_finite()) {
         return false;
     }
     let Some(size) = app.session.active().map(|st| st.doc.size) else { return false };
     let (w, h) = (f64::from(size.width.max(1)), f64::from(size.height.max(1)));
     let Some(d) = app.framework.dialogs.get_mut::<LightFlareDialog>() else { return false };
-    put(&mut d.fields, "x", (at[0] / w) as f32, range::POSITION, 0.001);
-    put(&mut d.fields, "y", (at[1] / h) as f32, range::POSITION, 0.001);
+    let (kx, ky) = if center { ("centerX", "centerY") } else { ("x", "y") };
+    put(&mut d.fields, kx, (at[0] / w) as f32, range::POSITION, 0.001);
+    put(&mut d.fields, ky, (at[1] / h) as f32, range::POSITION, 0.001);
     app.ctx().request_repaint();
     true
 }
